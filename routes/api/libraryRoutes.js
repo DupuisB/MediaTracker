@@ -1,319 +1,246 @@
+// routes/api/libraryRoutes.js
 const express = require('express');
-const db = require('../../database');
-const { verifyToken } = require('../../auth'); // Import the authentication middleware
+const db = require('../../dbUtils'); // Use promisified utils
+const { verifyToken } = require('../../auth');
 
 const router = express.Router();
 
-// Apply authentication middleware to all library routes
+// Apply auth middleware to all library routes
 router.use(verifyToken);
 
-// Helper function to map request status to db status based on type
-function getDbStatus(requestStatus, mediaType) {
-    switch (mediaType) {
-        case 'movie':
-        case 'series':
-            return requestStatus === 'to watch' ? 'to watch' :
-                   requestStatus === 'watching' ? 'watching' :
-                   requestStatus === 'watched' ? 'watched' : null;
-        case 'book':
-            return requestStatus === 'to read' ? 'to read' :
-                   requestStatus === 'reading' ? 'reading' :
-                   requestStatus === 'read' ? 'read' : null;
-        case 'video game':
-             return requestStatus === 'to play' ? 'to play' :
-                   requestStatus === 'playing' ? 'playing' :
-                   requestStatus === 'played' ? 'played' : null;
-        default:
-            return null; // Invalid media type
-    }
+// --- Helpers ---
+const VALID_MEDIA_TYPES = ['movie', 'series', 'book', 'video game'];
+const STATUS_MAP = {
+    'movie': ['to watch', 'watching', 'watched'],
+    'series': ['to watch', 'watching', 'watched'],
+    'book': ['to read', 'reading', 'read'],
+    'video game': ['to play', 'playing', 'played'],
+};
+const COMPLETED_STATUSES = ['watched', 'read', 'played'];
+
+function isValidStatusForType(status, mediaType) {
+    return STATUS_MAP[mediaType]?.includes(status.toLowerCase());
 }
 
-// Helper function to determine valid statuses for a media type
-function getValidStatuses(mediaType) {
-    switch (mediaType) {
-        case 'movie':
-        case 'series': return ['to watch', 'watching', 'watched'];
-        case 'book': return ['to read', 'reading', 'read'];
-        case 'video game': return ['to play', 'playing', 'played'];
-        default: return [];
-    }
+function getValidStatusesForType(mediaType) {
+    return STATUS_MAP[mediaType] || [];
 }
 
-
-// --- Get All Library Items (with optional filtering) ---
-router.get('/', (req, res) => {
-    const userId = req.userId; // Get user ID from the token verification middleware
+// --- Get Library Items (with filtering) ---
+router.get('/', async (req, res) => {
+    const userId = req.userId;
     const { mediaType, userStatus, minRating, maxRating } = req.query;
 
     let sql = `SELECT * FROM library_items WHERE userId = ?`;
     const params = [userId];
 
-    if (mediaType) {
-        sql += ` AND mediaType = ?`;
-        params.push(mediaType);
-    }
-    if (userStatus) {
-        sql += ` AND userStatus = ?`;
-        params.push(userStatus);
-    }
-    if (minRating) {
-        const minR = parseInt(minRating, 10);
-        if (!isNaN(minR) && minR >= 1 && minR <= 20) {
+    try {
+        if (mediaType) {
+            if (!VALID_MEDIA_TYPES.includes(mediaType)) {
+                return res.status(400).json({ message: 'Invalid mediaType specified.' });
+            }
+            sql += ` AND mediaType = ?`;
+            params.push(mediaType);
+        }
+        if (userStatus) {
+            // Basic check - more robust validation could check against mediatype if needed
+             sql += ` AND userStatus = ?`;
+             params.push(userStatus.toLowerCase());
+        }
+        if (minRating) {
+            const minR = parseInt(minRating, 10);
+            if (isNaN(minR) || minR < 1 || minR > 20) {
+                return res.status(400).json({ message: 'Invalid minRating. Must be between 1 and 20.' });
+            }
             sql += ` AND userRating >= ?`;
             params.push(minR);
-        } else {
-             return res.status(400).json({ message: 'Invalid minRating. Must be between 1 and 20.' });
         }
-    }
-     if (maxRating) {
-        const maxR = parseInt(maxRating, 10);
-         if (!isNaN(maxR) && maxR >= 1 && maxR <= 20) {
+         if (maxRating) {
+            const maxR = parseInt(maxRating, 10);
+             if (isNaN(maxR) || maxR < 1 || maxR > 20) {
+                return res.status(400).json({ message: 'Invalid maxRating. Must be between 1 and 20.' });
+            }
             sql += ` AND userRating <= ?`;
             params.push(maxR);
-        } else {
-            return res.status(400).json({ message: 'Invalid maxRating. Must be between 1 and 20.' });
         }
-    }
-     // Ensure minRating <= maxRating if both are provided
-    if (minRating && maxRating && parseInt(minRating) > parseInt(maxRating)) {
-        return res.status(400).json({ message: 'minRating cannot be greater than maxRating.' });
-    }
-
-    sql += ` ORDER BY addedAt DESC`; // Default sort order
-
-    db.all(sql, params, (err, rows) => {
-        if (err) {
-            console.error("Database error getting library items:", err.message);
-            return res.status(500).json({ message: 'Failed to retrieve library items.' });
+        // Check min <= max
+        if (minRating && maxRating && parseInt(minRating) > parseInt(maxRating)) {
+            return res.status(400).json({ message: 'minRating cannot be greater than maxRating.' });
         }
-        res.status(200).json(rows);
-    });
+
+        sql += ` ORDER BY addedAt DESC`;
+
+        const items = await db.all(sql, params);
+        res.status(200).json(items);
+
+    } catch (error) {
+        console.error("Get Library Error:", error);
+        res.status(500).json({ message: error.message || 'Failed to retrieve library items.' });
+    }
 });
 
-// --- Add a Media Item to the Library (Async/Await Version) ---
-router.post('/', async (req, res) => { // <<< Make handler async
+// --- Add Item ---
+router.post('/', async (req, res) => {
     const userId = req.userId;
     const {
         mediaType, mediaId, title, imageUrl, apiDescription,
-        userDescription, userRating, userStatus: requestStatus
+        userDescription, userRating, userStatus
      } = req.body;
 
-    try { // <<< Wrap in try...catch
-        // === Validation ===
-        if (!mediaType || !mediaId || !requestStatus || !title) {
-            return res.status(400).json({ message: 'mediaType, mediaId, title, and userStatus are required.' });
+    // Validation
+    if (!mediaType || !mediaId || !title || !userStatus) {
+        return res.status(400).json({ message: 'mediaType, mediaId, title, and userStatus are required.' });
+    }
+    if (!VALID_MEDIA_TYPES.includes(mediaType)) {
+         return res.status(400).json({ message: `Invalid mediaType.` });
+    }
+    if (!isValidStatusForType(userStatus, mediaType)) {
+        const valid = getValidStatusesForType(mediaType);
+        return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${valid.join(', ')}.` });
+    }
+    let ratingValue = null;
+    if (userRating !== undefined && userRating !== null && userRating !== '') {
+        ratingValue = parseInt(userRating, 10);
+        if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
+            return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20.' });
         }
-        const validMediaTypes = ['movie', 'series', 'book', 'video game'];
-        if (!validMediaTypes.includes(mediaType)) {
-             return res.status(400).json({ message: `Invalid mediaType.` });
+    }
+
+    const watchedAt = COMPLETED_STATUSES.includes(userStatus.toLowerCase()) ? new Date().toISOString() : null;
+
+    const insertSql = `
+        INSERT INTO library_items
+            (userId, mediaType, mediaId, title, imageUrl, apiDescription,
+             userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `;
+    const params = [
+        userId, mediaType, mediaId, title, imageUrl || null, apiDescription || null,
+        userDescription || null, ratingValue, userStatus.toLowerCase(), watchedAt
+    ];
+
+    try {
+        const result = await db.run(insertSql, params);
+        // Fetch and return the newly added item
+        const newItem = await db.get(`SELECT * FROM library_items WHERE id = ?`, [result.lastID]);
+        res.status(201).json(newItem);
+
+    } catch (error) {
+        console.error("Add Library Item Error:", error);
+        // Handle UNIQUE constraint error from dbUtils
+        if (error.message.includes('UNIQUE constraint failed')) {
+             return res.status(409).json({ message: 'This item is already in your library.' });
         }
-        const userStatus = getDbStatus(requestStatus, mediaType);
-        if (!userStatus) {
-            const validStatuses = getValidStatuses(mediaType);
-            return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${validStatuses.join(', ')}.` });
-        }
-        let ratingValue = null;
-        if (userRating !== undefined && userRating !== null) {
-            ratingValue = parseInt(userRating, 10);
-            if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-                return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20.' });
-            }
-        }
-
-        // === Check if item already exists (Promisified) ===
-        const existingItem = await new Promise((resolve, reject) => {
-            const checkSql = `SELECT id FROM library_items WHERE userId = ? AND mediaType = ? AND mediaId = ?`;
-            db.get(checkSql, [userId, mediaType, mediaId], (err, row) => {
-                 if (err) {
-                    console.error("Database error checking for existing library item:", err.message);
-                    return reject(new Error('Error checking library.')); // Reject promise
-                 }
-                 resolve(row); // Resolve with row or undefined
-            });
-        });
-
-        if (existingItem) {
-            return res.status(409).json({ message: 'This item is already in your library.' });
-        }
-
-        // === Prepare for Insert ===
-        // userStatus is available here directly
-        const watchedAt = ['watched', 'read', 'played'].includes(userStatus) ? new Date().toISOString() : null;
-
-        const insertSql = `
-            INSERT INTO library_items
-                (userId, mediaType, mediaId, title, imageUrl, apiDescription,
-                 userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-        `;
-        const params = [
-            userId, mediaType, mediaId, title, imageUrl || null, apiDescription || null,
-            userDescription || null, ratingValue, userStatus, watchedAt
-        ];
-
-        // === Insert the new item (Promisified) ===
-        const newItemIdResult = await new Promise((resolve, reject) => {
-            db.run(insertSql, params, function(err) {
-                 if (err) {
-                     console.error("Database error adding library item:", err.message);
-                     // Handle potential UNIQUE constraint error specifically
-                     if (err.message.includes('UNIQUE constraint failed')) {
-                         return reject(new Error('This item seems to already be in your library (Unique constraint).'));
-                     }
-                     return reject(new Error('Failed to add item to library.')); // Reject promise
-                 }
-                 resolve({ id: this.lastID }); // Resolve with new ID
-            });
-        });
-
-        // === Fetch and Return Newly Added Item (Promisified) ===
-        const newItem = await new Promise((resolve, reject) => {
-             db.get(`SELECT * FROM library_items WHERE id = ?`, [newItemIdResult.id], (err, item) => {
-                 if (err) {
-                    console.error("Database error fetching newly added library item:", err.message);
-                    // Even if fetch fails, the item WAS added, maybe return partial success?
-                    // Or reject to indicate something went wrong after insert. Let's reject.
-                    return reject(new Error('Item added, but failed to fetch details.'));
-                 }
-                 resolve(item); // Resolve with the full new item
-             });
-        });
-
-        res.status(201).json(newItem); // Send the complete new item back
-
-    } catch (error) { // Catch errors from promises or validation
-        console.error("Error during add library item:", error);
-        // Determine status code based on error message?
-        const statusCode = error.message.includes('already in your library') ? 409 : 500;
-        res.status(statusCode).json({ message: error.message || 'Server error while adding item.' });
+        res.status(500).json({ message: error.message || 'Failed to add item to library.' });
     }
 });
 
-
-// --- Edit a Library Item ---
-router.put('/:id', (req, res) => {
+// --- Edit Item ---
+router.put('/:id', async (req, res) => {
     const userId = req.userId;
     const itemId = req.params.id;
-    const { userDescription, userRating, userStatus: requestStatus } = req.body;
+    const { userDescription, userRating, userStatus } = req.body;
 
-    // Check if at least one field is being updated
-    if (userDescription === undefined && userRating === undefined && requestStatus === undefined) {
+    if (userDescription === undefined && userRating === undefined && userStatus === undefined) {
         return res.status(400).json({ message: 'No fields provided for update.' });
     }
 
-    // Fetch the existing item to validate status based on its mediaType
-    const getSql = `SELECT mediaType, userStatus as currentStatus FROM library_items WHERE id = ? AND userId = ?`;
-    db.get(getSql, [itemId, userId], (err, item) => {
-        if (err) {
-            console.error("Database error fetching item for update:", err.message);
-            return res.status(500).json({ message: 'Error finding library item.' });
-        }
+    try {
+        // Fetch the item first to get its type and current status
+        const item = await db.get(`SELECT mediaType, userStatus as currentStatus FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
         if (!item) {
-            return res.status(404).json({ message: 'Library item not found or you do not have permission to edit it.' });
+            return res.status(404).json({ message: 'Library item not found or not owned by user.' });
         }
 
         const { mediaType, currentStatus } = item;
         const updates = [];
         const params = [];
-        let newDbStatus = null; // Will hold the validated status if provided
+        let newDbStatus = null;
 
-         // Validate and prepare status update
-        if (requestStatus !== undefined) {
-            newDbStatus = getDbStatus(requestStatus, mediaType);
-            if (newDbStatus === null) {
-                 const validStatuses = getValidStatuses(mediaType);
-                return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${validStatuses.join(', ')}.` });
-            }
-            updates.push(`userStatus = ?`);
-            params.push(newDbStatus);
+        // Validate and add fields to update
+        if (userStatus !== undefined) {
+            const status = userStatus.toLowerCase();
+             if (!isValidStatusForType(status, mediaType)) {
+                 const valid = getValidStatusesForType(mediaType);
+                 return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${valid.join(', ')}.` });
+             }
+             updates.push(`userStatus = ?`);
+             params.push(status);
+             newDbStatus = status; // Store for watchedAt logic
 
-            // Handle watchedAt timestamp
-             const isNowWatched = ['watched', 'read', 'played'].includes(newDbStatus);
-             const wasAlreadyWatched = ['watched', 'read', 'played'].includes(currentStatus);
-
-             if (isNowWatched && !wasAlreadyWatched) {
-                // Status changed to watched/read/played
+             // Handle watchedAt timestamp
+             const isNowCompleted = COMPLETED_STATUSES.includes(newDbStatus);
+             const wasCompleted = COMPLETED_STATUSES.includes(currentStatus);
+             if (isNowCompleted && !wasCompleted) {
                 updates.push(`watchedAt = datetime('now')`);
-             } else if (!isNowWatched && wasAlreadyWatched) {
-                 // Status changed away from watched/read/played - clear the timestamp
+             } else if (!isNowCompleted && wasCompleted) {
                  updates.push(`watchedAt = NULL`);
-             } // else: no change in watched status relevance, do nothing to watchedAt
+             }
         }
 
-        // Prepare description update
         if (userDescription !== undefined) {
             updates.push(`userDescription = ?`);
-            params.push(userDescription); // Allow null or empty string
+            params.push(userDescription); // Allow empty string or null
         }
 
-        // Prepare rating update
         if (userRating !== undefined) {
-            if (userRating === null) { // Allow setting rating to null
-                 updates.push(`userRating = ?`);
-                 params.push(null);
-            } else {
-                const ratingValue = parseInt(userRating, 10);
-                if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-                    return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20, or null.' });
-                }
-                updates.push(`userRating = ?`);
-                params.push(ratingValue);
-            }
+             let ratingValue = null;
+             // Allow setting to null or empty string means null
+             if (userRating !== null && userRating !== '') {
+                 ratingValue = parseInt(userRating, 10);
+                 if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
+                     return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20, or null/empty.' });
+                 }
+             }
+             updates.push(`userRating = ?`);
+             params.push(ratingValue);
         }
-
-        // Always update the 'updatedAt' timestamp (handled by trigger, but explicitly adding is fine too)
-        // updates.push(`updatedAt = datetime('now')`); // Trigger handles this
 
         if (updates.length === 0) {
-             return res.status(400).json({ message: 'No valid fields provided for update.' }); // Should be caught earlier, but good fallback
+            // Should not happen due to initial check, but safe fallback
+             return res.status(400).json({ message: 'No valid update fields provided.' });
         }
 
-        // Construct the final SQL query
+        // Construct and run update query (Trigger handles updatedAt)
         const updateSql = `UPDATE library_items SET ${updates.join(', ')} WHERE id = ? AND userId = ?`;
         params.push(itemId, userId);
 
-        db.run(updateSql, params, function(err) {
-            if (err) {
-                console.error("Database error updating library item:", err.message);
-                return res.status(500).json({ message: 'Failed to update library item.' });
-            }
-            if (this.changes === 0) {
-                // This case should be rare because we fetched the item first, but handle it
-                return res.status(404).json({ message: 'Library item not found or no changes made.' });
-            }
+        const result = await db.run(updateSql, params);
 
-            // Fetch the updated item to return it
-            db.get(`SELECT * FROM library_items WHERE id = ?`, [itemId], (err, updatedItem) => {
-                 if (err) {
-                    console.error("Database error fetching updated item:", err.message);
-                    return res.status(200).json({ message: 'Item updated successfully, but failed to fetch details.' });
-                 }
-                 res.status(200).json(updatedItem);
-            });
-        });
-    });
+        if (result.changes === 0) {
+            // Should be rare given the initial fetch, maybe concurrent modification?
+            return res.status(404).json({ message: 'Item not found or no changes applied.' });
+        }
+
+        // Fetch and return the updated item
+        const updatedItem = await db.get(`SELECT * FROM library_items WHERE id = ?`, [itemId]);
+        res.status(200).json(updatedItem);
+
+    } catch (error) {
+        console.error("Update Library Item Error:", error);
+        res.status(500).json({ message: error.message || 'Failed to update library item.' });
+    }
 });
 
-
-// --- Delete a Library Item ---
-router.delete('/:id', (req, res) => {
+// --- Delete Item ---
+router.delete('/:id', async (req, res) => {
     const userId = req.userId;
     const itemId = req.params.id;
 
-    const sql = `DELETE FROM library_items WHERE id = ? AND userId = ?`;
-    db.run(sql, [itemId, userId], function(err) {
-        if (err) {
-            console.error("Database error deleting library item:", err.message);
-            return res.status(500).json({ message: 'Failed to delete library item.' });
+    try {
+        const result = await db.run(`DELETE FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ message: 'Library item not found or not owned by user.' });
         }
-        if (this.changes === 0) {
-            // Item didn't exist or didn't belong to the user
-            return res.status(404).json({ message: 'Library item not found or you do not have permission to delete it.' });
-        }
+        // Prefer 200 with message or 204 No Content
         res.status(200).json({ message: 'Library item deleted successfully.' });
-        // Alternatively, use status 204 No Content (often preferred for DELETE)
         // res.status(204).send();
-    });
+
+    } catch (error) {
+        console.error("Delete Library Item Error:", error);
+        res.status(500).json({ message: error.message || 'Failed to delete library item.' });
+    }
 });
 
 module.exports = router;

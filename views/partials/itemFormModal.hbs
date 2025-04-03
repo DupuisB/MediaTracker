@@ -1,0 +1,45 @@
+{{! views/partials/itemFormModal.hbs }}
+{{! Used by client-side JS to populate the generic modal }}
+<button class="modal-close-btn" aria-label="Close">×</button>
+<h2 id="modalTitle">{{modalTitle}}</h2>
+
+<form id="itemForm">
+    {{!-- Hidden fields managed by JS --}}
+    <input type="hidden" id="formMode" value="{{mode}}">
+    <input type="hidden" id="itemId" value="{{item.id}}">
+    <input type="hidden" id="mediaId" value="{{item.mediaId}}">
+    <input type="hidden" id="mediaType" value="{{item.mediaType}}">
+    {{!-- Store core data needed if adding --}}
+    <input type="hidden" id="coreTitle" value="{{item.title}}">
+    <input type="hidden" id="coreImageUrl" value="{{item.imageUrl}}">
+    <input type="hidden" id="coreApiDescription" value="{{item.apiDescription}}">
+
+    {{#if item.imageUrl}}
+    <img src="{{item.imageUrl}}" alt="{{item.title}}" class="modal-image-preview" onerror="this.style.display='none';">
+    {{/if}}
+
+    <div class="form-group">
+        <label for="userStatus">Your Status:</label>
+        <select id="userStatus" name="userStatus" required>
+            <option value="" disabled {{#unless item.userStatus}}selected{{/unless}}>-- Select Status --</option>
+            {{#each validStatuses}}
+            <option value="{{this}}" {{#if (eq this ../item.userStatus)}}selected{{/if}}>
+                {{capitalize this}}
+            </option>
+            {{/each}}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="userRating">Your Rating (1-20):</label>
+        <input type="number" id="userRating" name="userRating" min="1" max="20" placeholder="Optional" value="{{item.userRating}}">
+    </div>
+    <div class="form-group">
+        <label for="userDescription">Your Notes:</label>
+        <textarea id="userDescription" name="userDescription" rows="3" placeholder="Optional">{{item.userDescription}}</textarea>
+    </div>
+    <div class="modal-actions">
+        <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary">{{submitButtonText}}</button>
+    </div>
+     <p class="modal-error-message hidden"></p> {{!-- For displaying form errors --}}
+</form>

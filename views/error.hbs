@@ -1,0 +1,18 @@
+{{! views/error.hbs }}
+
+<section class="error-page card">
+  <h2 class="error-code">{{#if errorCode}}{{errorCode}}{{else}}Error{{/if}}</h2>
+  <p class="error-message-text">
+    {{#if errorMessage}}
+      {{errorMessage}}
+    {{else}}
+      An unexpected error occurred. Please try again later.
+    {{/if}}
+  </p>
+  <div class="error-actions">
+    <a href="/" class="btn btn-primary">Go to Homepage</a>
+    {{#if user}} {{!-- Show library link only if logged in --}}
+      <a href="/library" class="btn btn-secondary">Go to My Library</a>
+    {{/if}}
+  </div>
+</section>

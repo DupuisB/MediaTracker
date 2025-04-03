@@ -7,6 +7,7 @@
     - .gitignore
     - auth.js
     - database.js
+    - dbUtils.js
     - folder_structure.md
     - package-lock.json
     - package.json
@@ -48,19 +49,22 @@
         - viewRoutes.js
         - api/
             - authRoutes.js
+            - detailsRoutes.js
+            - igdbAuthHelper.js
             - libraryRoutes.js
             - searchRoutes.js
     - views/
         - about.hbs
+        - error.hbs
         - home.hbs
         - library.hbs
         - login.hbs
         - layouts/
             - main.hbs
         - partials/
-            - addItemModal.hbs
             - footer.hbs
             - header.hbs
+            - itemFormModal.hbs
             - libraryControls.hbs
             - loginForm.hbs
             - mediaCard.hbs
@@ -80,40 +84,47 @@ require('dotenv').config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const SALT_ROUNDS = 10;
-const COOKIE_NAME = 'authToken'; // Name for the JWT cookie
+const COOKIE_NAME = 'authToken';
 
 if (!JWT_SECRET) {
     console.error("FATAL ERROR: JWT_SECRET is not defined in .env file.");
-    process.exit(1); // Exit if the secret is missing
+    process.exit(1);
 }
 
-// --- Password Hashing ---
 async function hashPassword(password) {
     return await bcrypt.hash(password, SALT_ROUNDS);
 }
 
 async function comparePassword(password, hash) {
+    // Add check for null/undefined hash to prevent bcrypt errors
+    if (!hash) return false;
     return await bcrypt.compare(password, hash);
 }
 
-// --- Token Generation ---
 function generateToken(user) {
+    // Ensure user and user.id exist
+    if (!user || !user.id) {
+        throw new Error('Cannot generate token without valid user object (id, username)');
+    }
     const payload = { id: user.id, username: user.username };
-    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' }); // Expires in 1 day
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: '1d' });
 }
 
-// --- Set Auth Cookie ---
 function setAuthCookie(res, user) {
-    const token = generateToken(user);
-    res.cookie(COOKIE_NAME, token, {
-        httpOnly: true, // Prevents client-side JS access
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
-        maxAge: 24 * 60 * 60 * 1000, // 1 day expiration (matches token)
-        sameSite: 'lax' // Protects against CSRF to some extent
-    });
+    try {
+        const token = generateToken(user);
+        res.cookie(COOKIE_NAME, token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 24 * 60 * 60 * 1000, // 1 day
+            sameSite: 'lax'
+        });
+    } catch (error) {
+        console.error('Error setting auth cookie:', error);
+        // Handle the error appropriately, maybe send an error response earlier
+    }
 }
 
-// --- Clear Auth Cookie (NEW) ---
 function clearAuthCookie(res) {
     res.clearCookie(COOKIE_NAME, {
          httpOnly: true,
@@ -122,36 +133,39 @@ function clearAuthCookie(res) {
      });
 }
 
-// --- Verify Token Middleware (for API routes) ---
-// This verifies the cookie now instead of the header
+// --- Middleware ---
+
+// Verify Token for API routes (Checks cookie)
 function verifyToken(req, res, next) {
-    const token = req.cookies[COOKIE_NAME]; // Get token from cookie
+    const token = req.cookies[COOKIE_NAME];
 
     if (!token) {
-        // For API requests, return 401 directly
         return res.status(401).json({ message: 'Access denied. No token provided.' });
     }
 
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
-        req.userId = decoded.id; // Add user ID for API use
-        req.user = decoded; // Optionally add full user payload
+        req.userId = decoded.id; // Add user ID for API route handlers
+        req.user = decoded; // Optional: Add full decoded payload
         next();
     } catch (error) {
-        // Clear invalid/expired cookie
-        clearAuthCookie(res);
+        clearAuthCookie(res); // Clear invalid/expired cookie
+        let status = 401;
+        let message = 'Invalid token.';
         if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({ message: 'Token expired. Please login again.' });
+            message = 'Token expired. Please login again.';
+        } else if (error.name === 'JsonWebTokenError') {
+            message = 'Token signature is invalid.';
         }
-        return res.status(401).json({ message: 'Invalid token.' }); // Use 401 for auth issues
+         console.log('Token verification failed:', error.name);
+        return res.status(status).json({ message });
     }
 }
 
-// --- Check Auth Status Middleware (for VIEW routes) ---
-// Attaches user info to res.locals if logged in, otherwise proceeds
+// Check Auth Status for View routes (Adds user to res.locals)
 function checkAuthStatus(req, res, next) {
     const token = req.cookies[COOKIE_NAME];
-    res.locals.user = null; // Default to not logged in
+    res.locals.user = null; // Default: not logged in
 
     if (token) {
         try {
@@ -159,42 +173,42 @@ function checkAuthStatus(req, res, next) {
             // Make user info available to Handlebars templates
             res.locals.user = { id: decoded.id, username: decoded.username };
         } catch (error) {
-            // Invalid or expired token - clear cookie but don't block the request
-            console.log('Auth status check failed:', error.name);
+            // Invalid or expired token - clear cookie but don't block view rendering
+            console.log('Auth status check failed (clearing cookie):', error.name);
             clearAuthCookie(res);
         }
     }
-    next(); // Always proceed to the next middleware/route
+    next();
 }
 
-// --- Protect View Route Middleware (NEW) ---
-// Redirects to login page if user is not authenticated
+// Protect View Route Middleware (Redirects if not logged in)
 function requireLogin(req, res, next) {
     if (!res.locals.user) {
-        // Store the original URL they were trying to access (optional)
-        // req.session.returnTo = req.originalUrl; // Requires express-session
-        return res.redirect('/login'); // Redirect to login page
+        // Optional: Store intended URL using session middleware if needed
+        // req.session.returnTo = req.originalUrl;
+        return res.redirect('/login');
     }
-    next(); // User is logged in, proceed
+    next(); // User is logged in
 }
-
 
 module.exports = {
     hashPassword,
     comparePassword,
     setAuthCookie,
     clearAuthCookie,
-    verifyToken, // For API protection
-    checkAuthStatus, // For adding user to res.locals
-    requireLogin // For protecting specific view routes
+    verifyToken,
+    checkAuthStatus,
+    requireLogin
 };
 ```
 
 ### database.js
 
 ```js
+// database.js
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const util = require('util'); // Import the util module
 
 // Define the path to the database file
 const dbPath = path.resolve(__dirname, 'watchlist.db');
@@ -202,91 +216,194 @@ const dbPath = path.resolve(__dirname, 'watchlist.db');
 // Create or open the database
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
-        console.error('Error opening database:', err.message);
+        console.error('FATAL: Error opening database:', err.message);
+        process.exit(1); // Exit if DB can't be opened
     } else {
         console.log('Connected to the SQLite database.');
         initializeDatabase();
     }
 });
 
-// Function to initialize database schema
-function initializeDatabase() {
-    db.serialize(() => {
-        // Create Users table
-        db.run(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        passwordHash TEXT NOT NULL,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `, (err) => {
+// --- Promise Wrappers for DB Methods ---
+// These make it easier to use async/await with the sqlite3 library
+
+/**
+ * Promisified version of db.get
+ * @param {string} sql The SQL query to execute.
+ * @param {Array} [params=[]] Optional parameters for the SQL query.
+ * @returns {Promise<object|undefined>} Resolves with the row found, or undefined if not found. Rejects on error.
+ */
+db.getAsync = util.promisify(db.get).bind(db);
+
+/**
+ * Promisified version of db.all
+ * @param {string} sql The SQL query to execute.
+ * @param {Array} [params=[]] Optional parameters for the SQL query.
+ * @returns {Promise<Array>} Resolves with an array of rows found. Rejects on error.
+ */
+db.allAsync = util.promisify(db.all).bind(db);
+
+/**
+ * Promisified version of db.run
+ * IMPORTANT: Resolves with `this` context from the callback, which contains `lastID` and `changes`.
+ * @param {string} sql The SQL query to execute.
+ * @param {Array} [params=[]] Optional parameters for the SQL query.
+ * @returns {Promise<{lastID: number, changes: number}>} Resolves with an object containing lastID and changes. Rejects on error.
+ */
+db.runAsync = function(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        this.run(sql, params, function(err) { // Use `this` from the original callback
             if (err) {
-                console.error('Error creating users table:', err.message);
+                console.error('DB Run Error:', err.message, 'SQL:', sql); // Log details on error
+                reject(err);
             } else {
-                console.log('Users table checked/created successfully.');
+                // Resolve with the context containing lastID and changes
+                resolve({ lastID: this.lastID, changes: this.changes });
             }
         });
+    });
+}.bind(db); // Bind the function to the db context
 
-        // Create Library Items table
-        // Create Library Items table with NEW COLUMNS
-        db.run(`
-            CREATE TABLE IF NOT EXISTS library_items (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              userId INTEGER NOT NULL,
-              mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
-              mediaId TEXT NOT NULL, -- ID from external API
-  
-              -- NEW: Core media details stored at time of adding
-              title TEXT,
-              imageUrl TEXT,
-              apiDescription TEXT, -- Original description from API
-  
-              -- User-specific details
-              userDescription TEXT,
-              userRating INTEGER CHECK(userRating >= 1 AND userRating <= 20),
-              userStatus TEXT NOT NULL CHECK(userStatus IN ('to watch', 'to read', 'to play', 'watching', 'reading', 'playing', 'watched', 'read', 'played')),
-  
-              -- Timestamps
-              addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-              updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-              watchedAt DATETIME, -- Timestamp when marked as watched/read/played
-  
-              FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
-              UNIQUE(userId, mediaType, mediaId) -- Prevent adding the same item multiple times per user
-            )
-          `, (err) => {
-              if (err) {
-                  console.error('Error creating library_items table:', err.message);
-              } else {
-                  console.log('Library Items table checked/created successfully.');
-              }
-          });
-  
-        // Add triggers to automatically update 'updatedAt' timestamp
-        // Drop existing trigger first (optional, good for development)
-        db.run(`DROP TRIGGER IF EXISTS update_library_item_timestamp;`);
-        db.run(`
-          CREATE TRIGGER update_library_item_timestamp
-          AFTER UPDATE ON library_items
-          FOR EACH ROW
-          BEGIN
-              UPDATE library_items SET updatedAt = CURRENT_TIMESTAMP WHERE id = OLD.id;
-          END;
-        `, (err) => {
+
+// Function to initialize database schema (remains largely the same)
+function initializeDatabase() {
+    db.serialize(() => {
+        // Wrap runs in try/catch for better initialization error reporting
+        try {
+            // Create Users table
+            db.run(`
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    passwordHash TEXT NOT NULL,
+                    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('Users table checked/created successfully.');
+
+            // Create Library Items table with NEW COLUMNS
+            db.run(`
+                CREATE TABLE IF NOT EXISTS library_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    userId INTEGER NOT NULL,
+                    mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
+                    mediaId TEXT NOT NULL, -- ID from external API
+
+                    -- Core media details stored at time of adding
+                    title TEXT NOT NULL,
+                    imageUrl TEXT,
+                    apiDescription TEXT, -- Original description from API
+
+                    -- User-specific details
+                    userDescription TEXT,
+                    userRating INTEGER CHECK(userRating IS NULL OR (userRating >= 1 AND userRating <= 20)), -- Allow NULL
+                    userStatus TEXT NOT NULL CHECK(userStatus IN ('to watch', 'to read', 'to play', 'watching', 'reading', 'playing', 'watched', 'read', 'played')),
+
+                    -- Timestamps
+                    addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    watchedAt DATETIME, -- Timestamp when marked as watched/read/played
+
+                    FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+                    UNIQUE(userId, mediaType, mediaId) -- Prevent adding the same item multiple times per user
+                )
+            `);
+             console.log('Library Items table checked/created successfully.');
+
+            // Add triggers to automatically update 'updatedAt' timestamp
+            // Drop existing trigger first (safer for development)
+            db.run(`DROP TRIGGER IF EXISTS update_library_item_timestamp;`);
+            db.run(`
+                CREATE TRIGGER update_library_item_timestamp
+                AFTER UPDATE ON library_items
+                FOR EACH ROW
+                BEGIN
+                    UPDATE library_items SET updatedAt = CURRENT_TIMESTAMP WHERE id = OLD.id;
+                END;
+            `);
+             console.log('Update timestamp trigger created/checked successfully.');
+
+        } catch (err) {
+             console.error('Error during database initialization:', err.message);
+             // Depending on the error, might want to exit: process.exit(1);
+        }
+    });
+}
+
+// Export the db object with the added Async methods
+module.exports = db;
+```
+
+### dbUtils.js
+
+```js
+// dbUtils.js
+const db = require('./database'); // Assuming database.js exports the db connection
+
+/**
+ * Promisified version of db.get
+ * @param {string} sql SQL query with placeholders
+ * @param {Array} params Parameters for the SQL query
+ * @returns {Promise<object|undefined>} Resolves with the row object or undefined if not found
+ */
+function get(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
             if (err) {
-                // Ignore error if trigger already exists (less critical)
-                if (!err.message.includes('already exists')) {
-                    console.error('Error creating update timestamp trigger:', err.message);
-                }
-            } else {
-                console.log('Update timestamp trigger created successfully.');
+                console.error('DB Get Error:', err.message);
+                return reject(new Error(`Database error: ${err.message}`));
             }
+            resolve(row);
         });
     });
 }
 
-module.exports = db;
+/**
+ * Promisified version of db.all
+ * @param {string} sql SQL query with placeholders
+ * @param {Array} params Parameters for the SQL query
+ * @returns {Promise<Array<object>>} Resolves with an array of row objects
+ */
+function all(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) {
+                console.error('DB All Error:', err.message);
+                return reject(new Error(`Database error: ${err.message}`));
+            }
+            resolve(rows);
+        });
+    });
+}
+
+/**
+ * Promisified version of db.run
+ * @param {string} sql SQL query with placeholders
+ * @param {Array} params Parameters for the SQL query
+ * @returns {Promise<{lastID: number, changes: number}>} Resolves with an object containing lastID and changes
+ */
+function run(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        // Use function() to access this.lastID and this.changes
+        db.run(sql, params, function (err) {
+            if (err) {
+                console.error('DB Run Error:', err.message);
+                // Handle specific errors if needed, e.g., UNIQUE constraint
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return reject(new Error('UNIQUE constraint failed. Item might already exist.'));
+                }
+                return reject(new Error(`Database error: ${err.message}`));
+            }
+            resolve({ lastID: this.lastID, changes: this.changes });
+        });
+    });
+}
+
+module.exports = {
+    get,
+    all,
+    run
+};
 ```
 
 ### package.json
@@ -336,97 +453,114 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const cookieParser = require('cookie-parser'); // Import cookie-parser
-const { engine } = require('express-handlebars'); // Import handlebars engine
+const cookieParser = require('cookie-parser');
+const { engine } = require('express-handlebars');
 
-const db = require('./database'); // Ensure DB connection
+const db = require('./database'); // Ensures DB init runs
+const { checkAuthStatus } = require('./auth'); // Middleware for view user status
 
-// --- Middleware for Auth Status (used by view routes) ---
-const { checkAuthStatus } = require('./auth'); // We'll add this function to auth.js
-
-// --- Route Imports ---
+// Route Imports
 const authApiRoutes = require('./routes/api/authRoutes');
 const searchApiRoutes = require('./routes/api/searchRoutes');
 const libraryApiRoutes = require('./routes/api/libraryRoutes');
-const viewRoutes = require('./routes/viewRoutes'); // Import view routes
+const viewRoutes = require('./routes/viewRoutes');
+const detailsApiRoutes = require('./routes/api/detailsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // --- Handlebars Engine Setup ---
 app.engine('hbs', engine({
-    extname: '.hbs', // Use .hbs extension
-    defaultLayout: 'main', // Specify main.hbs as the default layout
-    layoutsDir: path.join(__dirname, 'views/layouts'), // Layouts directory
-    partialsDir: path.join(__dirname, 'views/partials'), // Partials directory
-    // Optional: Add helpers here if needed
+    extname: '.hbs',
+    defaultLayout: 'main',
+    layoutsDir: path.join(__dirname, 'views/layouts'),
+    partialsDir: path.join(__dirname, 'views/partials'),
+    // Server-side helpers (can mirror client-side ones if needed)
     helpers: {
         eq: (v1, v2) => v1 === v2,
-        json: (context) => JSON.stringify(context), // For debugging in templates
+        json: (context) => JSON.stringify(context),
+        // Add other helpers needed by server-rendered templates (e.g., date formatting)
+        currentYear: () => new Date().getFullYear(),
+         // Basic capitalize helper
+         capitalize: (str) => (typeof str === 'string' && str.length > 0) ? str.charAt(0).toUpperCase() + str.slice(1) : str,
+         // Simple formatYear helper (add more robust date formatting if needed)
+         formatYear: (dateString) => dateString ? new Date(dateString).getFullYear() : '',
+         formatDate: (dateString) => dateString ? new Date(dateString).toLocaleDateString() : '',
+         classify: (str) => typeof str === 'string' ? str.replace(/\s+/g, '-').toLowerCase() : '',
+         defaultIfEmpty: (value, defaultValue) => value || defaultValue || '',
+         join: (arr, separator) => Array.isArray(arr) ? arr.join(separator) : '',
+         truncate: (str, len) => (str && str.length > len) ? str.substring(0, len) + '...' : str,
     }
 }));
 app.set('view engine', 'hbs');
-app.set('views', path.join(__dirname, 'views')); // Views directory
+app.set('views', path.join(__dirname, 'views'));
 
 // --- Core Middleware ---
-app.use(cors({ // Configure CORS if your API might be called from other origins
-    origin: `http://localhost:${PORT}`, // Allow requests from frontend origin
-    credentials: true // Allow cookies to be sent
+// Configure CORS more restrictively if frontend is served separately
+// For same-origin, basic CORS might not be strictly needed but doesn't hurt
+app.use(cors({
+    origin: `http://localhost:${PORT}`, // Allow requests only from own origin
+    credentials: true // Allow cookies
 }));
-app.use(express.json()); // Parse JSON request bodies
-app.use(express.urlencoded({ extended: false })); // Parse URL-encoded bodies (for forms if any)
+app.use(express.json()); // Parse JSON bodies
+app.use(express.urlencoded({ extended: false })); // Parse URL-encoded bodies
 app.use(cookieParser()); // Parse cookies
 app.use(express.static(path.join(__dirname, 'public'))); // Serve static files
 
-// --- Middleware to make auth status available to ALL views ---
-app.use(checkAuthStatus); // Run checkAuthStatus on every request
+// --- Routes ---
+// Check auth status *before* view routes that might use res.locals.user
+// Note: API routes use `verifyToken` internally where needed.
+// `checkAuthStatus` is primarily for VIEW rendering.
+// Placing it here makes `res.locals.user` available everywhere *after* this line.
+app.use(checkAuthStatus);
 
-// --- View Routes ---
-app.use('/', viewRoutes); // Use view routes for page rendering
-
-// --- API Routes ---
-// Note: API routes might not need CORS if only called from the same origin,
-// but it's safer to leave it enabled globally or configure specifically.
+app.use('/', viewRoutes); // View routes first
 app.use('/api/auth', authApiRoutes);
 app.use('/api/search', searchApiRoutes);
-app.use('/api/library', libraryApiRoutes);
+app.use('/api/library', libraryApiRoutes); 
+app.use('/api/details', detailsApiRoutes); // Library API routes are protected internally
 
 // --- Error Handling ---
-// API 404 Handler
+
+// API 404 Handler (Specific to /api paths)
 app.use('/api/*', (req, res) => {
     res.status(404).json({ message: 'API endpoint not found.' });
 });
 
-// General 404 Handler for views (after all other routes)
+// General 404 Handler (Catches non-API, non-matched routes)
 app.use((req, res) => {
-     res.status(404).render('error', { // Assuming you create an error.hbs view
+     res.status(404).render('error', { // Render a generic 404 page
         layout: 'main', // Use the main layout
         pageTitle: 'Not Found',
         errorCode: 404,
         errorMessage: 'Sorry, the page you are looking for does not exist.',
-        user: res.locals.user // Pass user status
+        // user is available via res.locals.user from checkAuthStatus
      });
 });
 
-
-// General error handler (should be last)
+// Final Error Handler (Catches errors from routes or middleware)
+// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-    console.error("Unhandled error:", err.stack); // Log stack trace
-     const status = err.status || 500;
-     const message = err.message || 'An unexpected server error occurred.';
+    console.error("Unhandled Error:", err); // Log the full error stack
 
-    // Respond differently for API requests vs View requests
+    const status = err.status || 500;
+    const message = err.message || 'An unexpected server error occurred.';
+
+    // Respond differently based on request type
     if (req.originalUrl.startsWith('/api/')) {
          res.status(status).json({ message: message });
     } else {
-        res.status(status).render('error', { // Render an error page
+        // Avoid sending stack trace in production
+        const displayMessage = (process.env.NODE_ENV === 'production' && status === 500)
+            ? 'An internal server error occurred.'
+            : message;
+
+        res.status(status).render('error', {
             layout: 'main',
             pageTitle: 'Error',
             errorCode: status,
-            errorMessage: message,
-            // In production, you might hide the detailed error message
-            // errorMessage: status === 500 ? 'An internal server error occurred.' : message,
-            user: res.locals.user
+            errorMessage: displayMessage,
+            // user is available via res.locals.user
         });
     }
 });
@@ -438,16 +572,17 @@ app.listen(PORT, () => {
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('SIGINT signal received: closing HTTP server and DB connection')
+  console.log('\nSIGINT received: Closing server and database connection...');
   db.close((err) => {
     if (err) {
       console.error('Error closing database:', err.message);
+      process.exit(1); // Exit with error code
     } else {
       console.log('Database connection closed.');
+      process.exit(0); // Exit cleanly
     }
-    process.exit(0)
-  })
-})
+  });
+});
 ```
 
 ### style.css
@@ -1569,125 +1704,82 @@ header {
 
 ```js
 // public/js/main.js
+(function () {
+    'use strict';
 
-// --- IIFE to encapsulate code ---
-(function() {
-    // --- Configuration ---
-    const API_BASE_URL = '/api'; // Relative URL
+    // --- Constants ---
+    const API_BASE_URL = '/api';
+    const TEMPLATE_BASE_URL = '/templates';
+
+    // --- DOM Elements (Cached) ---
+    const mainContent = document.querySelector('main.container'); // Event delegation target
+    const statusMessageEl = document.getElementById('statusMessage');
+    const responseAreaEl = document.getElementById('responseArea');
+    const statusSectionEl = document.getElementById('statusSection');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const searchForm = document.getElementById('searchForm');
+    const libraryControls = document.getElementById('libraryControls');
+    const resultsArea = document.getElementById('resultsArea');
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const infoModal = document.getElementById('infoModal');
+    const modalContentArea = document.getElementById('modalContentArea');
+    const deleteConfirmModal = document.getElementById('deleteConfirmModal');
 
     // --- State ---
-    let compiledTemplates = {}; // Cache for compiled Handlebars templates
+    let compiledTemplates = {}; // Cache for fetched Handlebars templates
+    let itemToDeleteId = null; // Store ID for delete confirmation
 
-    // --- DOM Elements (Cache elements present on load) ---
-    const resultsArea = document.getElementById('resultsArea');
-    const statusMessage = document.getElementById('statusMessage');
-    const responseArea = document.getElementById('responseArea');
-    const statusSection = document.getElementById('statusSection'); // To hide/show
-    const logoutBtn = document.getElementById('logoutBtn');
-
-    // Elements potentially added/removed or specific to pages
-    const getSearchForm = () => document.getElementById('searchForm');
-    const getLibraryControls = () => document.getElementById('libraryControls');
-    const getResultsArea = () => document.getElementById('resultsArea');
-    const getLoginForm = () => document.getElementById('loginForm');
-    const getRegisterForm = () => document.getElementById('registerForm');
-    const getAddItemModal = () => document.getElementById('addItemModal');
-    const getModalContentArea = () => document.getElementById('modalContentArea');
-    const getInfoModal = () => document.getElementById('infoModal');
-    const getModalOverlay = () => document.getElementById('infoModal');
-    
     // --- Handlebars Setup & Helpers ---
-    // Register helpers needed by mediaCard.hbs, addItemModal.hbs etc.
-    // These are simple examples, use a library like Moment.js/date-fns for robust date formatting
-    Handlebars.registerHelper('formatYear', function(dateString) {
-        return dateString ? new Date(dateString).getFullYear() : '';
-    });
-     Handlebars.registerHelper('formatDate', function(dateString) {
-        return dateString ? new Date(dateString).toLocaleDateString() : '';
-    });
-    Handlebars.registerHelper('join', function(arr, separator) {
-        return Array.isArray(arr) ? arr.join(separator) : '';
-    });
-    Handlebars.registerHelper('truncate', function(str, len) {
-        if (str && str.length > len) {
-            return str.substring(0, len) + '...';
-        }
-        return str;
-    });
-    Handlebars.registerHelper('classify', function(str) {
-        // Basic helper to create CSS class from status (e.g., "to watch" -> "to-watch")
-         return typeof str === 'string' ? str.replace(/\s+/g, '-').toLowerCase() : '';
-    });
-     Handlebars.registerHelper('capitalize', function(str) {
-         return typeof str === 'string' ? str.charAt(0).toUpperCase() + str.slice(1) : '';
-    });
-    // Add to Handlebars helpers registration in main.js
-    Handlebars.registerHelper('defaultIfEmpty', function(value1, value2) {
-        return value1 || value2 || '';
-    });
-    // Register a custom helper to check equality
-    Handlebars.registerHelper('eq', function(arg1, arg2) {
-        return arg1 === arg2;
-    });
-
-
-    // Function to fetch and compile a Handlebars template (with caching)
-    async function getTemplate(templateName) {
-        if (compiledTemplates[templateName]) {
-            return compiledTemplates[templateName];
-        }
-        try {
-            // Use the /templates/:templateName route we created
-            const response = await fetch(`/templates/${templateName}`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch template: ${templateName} (${response.status})`);
-            }
-            const templateString = await response.text();
-            compiledTemplates[templateName] = Handlebars.compile(templateString);
-            return compiledTemplates[templateName];
-        } catch (error) {
-            console.error(`Error getting template ${templateName}:`, error);
-            displayStatus(`Error loading template ${templateName}.`, true);
-            return null; // Indicate failure
-        }
+    // Register client-side helpers (if not relying solely on server-side for initial render)
+    // Ensure these match server-side helpers if templates are used in both places
+    if (window.Handlebars) {
+        const helpers = {
+            eq: (v1, v2) => v1 === v2,
+            json: (context) => JSON.stringify(context),
+            currentYear: () => new Date().getFullYear(),
+            capitalize: (str) => (typeof str === 'string' && str.length > 0) ? str.charAt(0).toUpperCase() + str.slice(1) : str,
+            formatYear: (dateString) => dateString ? new Date(dateString).getFullYear() : '',
+            formatDate: (dateString) => dateString ? new Date(dateString).toLocaleDateString() : '',
+            classify: (str) => typeof str === 'string' ? str.replace(/\s+/g, '-').toLowerCase() : '',
+            defaultIfEmpty: (value, defaultValue) => value || defaultValue || '',
+            join: (arr, separator) => Array.isArray(arr) ? arr.join(separator) : '',
+            truncate: (str, len) => (str && str.length > len) ? str.substring(0, len) + '...' : str,
+        };
+        Object.keys(helpers).forEach(key => Handlebars.registerHelper(key, helpers[key]));
+    } else {
+        console.warn('Handlebars runtime not found. Client-side templates may not work.');
     }
 
-    // --- Helper Functions ---
-    function displayStatus(message, isError = false, isSuccess = false) {
-        if (!statusMessage) return; // Element might not exist on all pages
-        statusMessage.textContent = `Status: ${message}`;
-        statusMessage.className = isError ? 'error' : (isSuccess ? 'success' : '');
-        statusSection?.classList.remove('hidden'); // Show status section on message
-        console.log(message);
+    // --- Utility Functions ---
+    function showStatus(message, type = 'info') { // type = 'info', 'success', 'error'
+        if (!statusMessageEl || !statusSectionEl) return;
+        statusMessageEl.textContent = message;
+        statusMessageEl.className = `status-${type}`; // Use classes for styling
+        statusSectionEl.classList.remove('hidden');
+        console.log(`Status [${type}]: ${message}`);
+        // Optional: Auto-hide after a delay?
+        // setTimeout(() => statusSectionEl.classList.add('hidden'), 5000);
     }
 
-    function displayResponse(data) {
-         if (!responseArea) return;
-        try {
-            responseArea.textContent = JSON.stringify(data, null, 2);
-        } catch (e) {
-            responseArea.textContent = String(data);
-        }
+    function showResponse(data) {
+        if (!responseAreaEl) return;
+        responseAreaEl.textContent = JSON.stringify(data, null, 2);
     }
 
-    function showSpinner(spinnerId) {
-        document.getElementById(spinnerId)?.classList.remove('hidden');
-    }
-    function hideSpinner(spinnerId) {
-        document.getElementById(spinnerId)?.classList.add('hidden');
+    function showSpinner(spinnerId, show = true) {
+        document.getElementById(spinnerId)?.classList.toggle('hidden', !show);
     }
 
-
-    // --- API Request Function (Handles Cookies Automatically) ---
-    async function makeApiRequest(endpoint, method = 'GET', body = null) {
-        displayStatus('Sending request...');
-        showSpinner(endpoint.includes('library') ? 'librarySpinner' : 'searchSpinner'); // Show relevant spinner
+    // Simplified API request function
+    async function apiRequest(endpoint, method = 'GET', body = null) {
         const url = `${API_BASE_URL}${endpoint}`;
         const options = {
-            method: method,
-            headers: {} // No Authorization header needed, cookies handled by browser
+            method,
+            headers: {
+                // Cookies are sent automatically by the browser
+            },
         };
-
         if (body) {
             options.headers['Content-Type'] = 'application/json';
             options.body = JSON.stringify(body);
@@ -1695,546 +1787,609 @@ header {
 
         try {
             const response = await fetch(url, options);
-            let responseData;
+            const responseData = response.status === 204 ? {} : await response.json(); // Handle No Content
 
-            // Handle different success statuses
-             if (response.status === 204) { // No Content (e.g., DELETE)
-                responseData = { message: 'Operation successful.' }; // Create success data
-            } else if (response.ok) { // 200, 201
-                responseData = await response.json();
-            } else { // Handle HTTP errors (4xx, 5xx)
-                 responseData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` })); // Try to parse error JSON
-                 const errorMessage = responseData?.message || `Request failed with status: ${response.status}`;
-                 throw new Error(errorMessage); // Throw error to be caught below
+            if (!response.ok) {
+                 // Throw an error object with status and message
+                 const error = new Error(responseData.message || `HTTP error ${response.status}`);
+                 error.status = response.status;
+                 error.data = responseData;
+                 throw error;
             }
-
-            displayResponse(responseData);
-            displayStatus(`${method} ${endpoint} - Success!`, false, true); // Mark as success
+            showResponse(responseData); // Show successful response data
             return responseData;
-
         } catch (error) {
-            console.error('API Request Error:', error);
-            const errorMsg = error.message || 'An unknown API error occurred.';
-            displayStatus(`Error: ${errorMsg}`, true);
-            displayResponse({ error: errorMsg }); // Show error in response area
-            // Specific handling for auth errors (redirect to login)
-            if (error.message.includes('Access denied') || error.message.includes('expired') || error.message.includes('Invalid token')) {
-                 // Wait a moment for user to see message, then redirect
-                 setTimeout(() => {
-                    window.location.href = '/login'; // Redirect to login page
-                 }, 1500);
+            console.error(`API Request Error (${method} ${endpoint}):`, error);
+            const message = error.message || 'An unknown API error occurred.';
+            showStatus(message, 'error');
+            showResponse({ error: message, status: error.status, data: error.data });
+
+            // Handle critical auth errors (e.g., redirect to login)
+            if (error.status === 401) {
+                showStatus('Authentication error. Redirecting to login...', 'error');
+                setTimeout(() => { window.location.href = '/login'; }, 1500);
             }
-            return null; // Indicate failure
-        } finally {
-             hideSpinner(endpoint.includes('library') ? 'librarySpinner' : 'searchSpinner'); // Hide spinner
+            throw error; // Re-throw for calling function to handle if needed
         }
     }
 
-     // --- REFINED: renderResults to add data to card ---
-     async function renderResults(items, targetElement, templateName, cardClass, placeholderText) {
-        if (!targetElement) return;
-        targetElement.innerHTML = ''; // Clear previous
-        targetElement.classList.remove('loading');
+    // Function to fetch and compile Handlebars template
+    async function getTemplate(templateName) {
+        if (compiledTemplates[templateName]) {
+            return compiledTemplates[templateName];
+        }
+        try {
+            const response = await fetch(`${TEMPLATE_BASE_URL}/${templateName}`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch template: ${templateName} (${response.status})`);
+            }
+            const templateString = await response.text();
+            if (!window.Handlebars) throw new Error("Handlebars runtime missing");
+            compiledTemplates[templateName] = Handlebars.compile(templateString);
+            return compiledTemplates[templateName];
+        } catch (error) {
+            console.error(`Error loading template ${templateName}:`, error);
+            showStatus(`Error loading template ${templateName}.`, 'error');
+            return null;
+        }
+    }
 
-        const template = await getTemplate(templateName); // Use mediaCard template
+    // Render items using a template
+    async function renderItems(items, targetElement, templateName, context = {}) {
+        if (!targetElement) return;
+
+        const template = await getTemplate(templateName);
         if (!template) {
             targetElement.innerHTML = `<p class="placeholder-text error">Error loading display template.</p>`;
             return;
         }
 
-        // Render items one by one to attach data easily
-        if (!items || items.length === 0) {
-             targetElement.innerHTML = `<p class="placeholder-text">${placeholderText}</p>`;
-             return;
+        const defaultContext = {
+            items: items,
+            placeholder: 'No items to display.',
+            hidePlaceholder: false
+        };
+        targetElement.innerHTML = template({ ...defaultContext, ...context });
+    }
+
+    // --- Modal Handling ---
+    function openModal(modalElement, contentHTML = '') {
+        if (!modalElement) return;
+        const contentArea = modalElement.querySelector('.modal-content-area') || modalElement.querySelector('#modalContentArea'); // Flexible content area selector
+         if (contentArea && contentHTML) {
+             contentArea.innerHTML = contentHTML;
+         }
+        modalElement.classList.remove('hidden');
+        // Focus management could be added here
+    }
+
+    function closeModal(modalElement) {
+        if (!modalElement) return;
+        modalElement.classList.add('hidden');
+         const contentArea = modalElement.querySelector('.modal-content-area') || modalElement.querySelector('#modalContentArea');
+         if (contentArea) {
+             contentArea.innerHTML = ''; // Clear content on close
+         }
+    }
+
+    // Open the Add/Edit Item Form Modal
+    async function openItemFormModal(mode = 'add', itemData = {}) {
+        const template = await getTemplate('itemFormModal');
+        if (!template || !infoModal) return;
+
+        const isAddMode = mode === 'add';
+        const context = {
+            mode: mode,
+            modalTitle: isAddMode ? `Add "${itemData.title}" to Library` : `Edit "${itemData.title}"`,
+            submitButtonText: isAddMode ? 'Add Item' : 'Save Changes',
+            item: isAddMode ? {
+                // For adding, map search result data or defaults
+                mediaId: itemData.id || itemData.mediaId, // Use id from search result
+                mediaType: itemData.type || itemData.mediaType,
+                title: itemData.title,
+                imageUrl: itemData.imageUrl,
+                apiDescription: itemData.description || itemData.apiDescription,
+                // Provide empty user fields for add form
+                id: null,
+                userStatus: '',
+                userRating: '',
+                userDescription: '',
+            } : itemData, // For editing, use the full library item data
+            validStatuses: getValidStatuses(itemData.type || itemData.mediaType),
+        };
+
+        openModal(infoModal, template(context));
+    }
+
+    // Open the Details Modal
+    async function openDetailsModal(mergedItemData, isLibraryItem) {
+        const template = await getTemplate('mediaDetailsModal');
+        if (!template || !infoModal) return;
+
+        const context = {
+            item: mergedItemData,
+            isLibraryItem: isLibraryItem
+        };
+        openModal(infoModal, template(context));
+    }
+
+    // Open Delete Confirmation Modal
+    function openDeleteConfirmModal(itemId, itemTitle) {
+        itemToDeleteId = itemId; // Store the ID
+        const messageEl = deleteConfirmModal?.querySelector('#deleteConfirmMessage');
+        if (messageEl) {
+            messageEl.textContent = `Are you sure you want to delete "${itemTitle}" from your library?`;
         }
-
-        items.forEach(item => {
-             const itemForTemplate = {
-                ...item,
-                // Ensure consistent naming
-                apiDescription: item.description || item.apiDescription || '',
-                mediaType: item.type || item.mediaType,
-             };
-
-            const html = template({ // Render single item
-                items: [itemForTemplate], // Pass as array for the #each block
-                cardClass: cardClass,
-                isSearchResult: cardClass === 'result-card'
-             });
-
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html.trim(); // Render into temporary div
-            const cardElement = tempDiv.firstChild; // Get the rendered card element
-
-            if (cardElement) {
-                // Attach the full original item data to the card element
-                cardElement.dataset.itemData = JSON.stringify(item); // <<< Store data here
-                targetElement.appendChild(cardElement); // Add card to the results area
-            }
-        });
-
-        attachCardListeners(targetElement); // Attach listeners after all cards are added
+        openModal(deleteConfirmModal);
     }
 
-    // --- NEW: Function to attach listeners to cards ---
-    function attachCardListeners(parentElement) {
-        parentElement.querySelectorAll('.result-card, .library-card').forEach(card => {
-            // Store item data directly on the card element
-            const button = card.querySelector('.add-to-library-btn, .edit-library-item-btn'); // Find a button to get initial data string
-            if (button) {
-                // Find the corresponding item data using mediaId or id
-                const item = JSON.parse(button.closest('.result-card, .library-card').querySelector('.add-to-library-btn, .edit-library-item-btn,[data-id]')?.closest('.result-card, .library-card')?.dataset.itemData || '{}'); // Need a better way to get data back if button isn't the source
-
-                // Let's refine renderResults to add data directly to card
-            }
-
-
-            card.addEventListener('click', handleCardClick);
-            // Prevent card click if a button inside was clicked
-            card.querySelectorAll('button, a, details, summary, input, select, textarea').forEach(interactiveElement => {
-                interactiveElement.addEventListener('click', (event) => {
-                    event.stopPropagation(); // Stop click from bubbling up to the card
-                });
-            });
-        });
-    }
-   
     // --- Event Handlers ---
-    async function handleLogout(event) {
-        event.preventDefault();
-        const result = await makeApiRequest('/auth/logout', 'POST');
-        if (result) {
-            displayStatus('Logout successful. Redirecting...', false, true);
-            // Redirect to home page after logout
-            window.location.href = '/';
+
+    // Delegate clicks within the main content area
+    async function handleMainContentClick(event) {
+        const target = event.target;
+        const card = target.closest('.library-card, .result-card'); // Find parent card
+
+        // Determine the action based on the button clicked
+        const action = target.matches('.action-add') ? 'add' :
+                       target.matches('.action-edit') ? 'edit' :
+                       target.matches('.action-delete') ? 'delete' :
+                       target.matches('.action-details') ? 'details' : null;
+
+        // Exit if no card or no recognized action button was clicked
+        if (!action || !card) {
+            return;
+        }
+
+        event.stopPropagation(); // Prevent card click bubbling if a button was hit
+
+        // Retrieve the basic data stored on the card
+        const basicItemData = JSON.parse(card?.dataset.itemJson || '{}');
+        const isLibraryItem = card.classList.contains('library-card');
+
+        // --- Handle Actions ---
+        switch (action) {
+            case 'add':
+                // Add action is only relevant for search results (isLibraryItem should be false)
+                if (isLibraryItem) {
+                    console.warn("Add action clicked on a library item card. Ignoring.");
+                    return;
+                }
+                openItemFormModal('add', basicItemData);
+                break;
+
+            case 'edit':
+                // Edit action only applies to library items which MUST have a database id
+                if (!isLibraryItem || !basicItemData.id) {
+                    console.error("Edit action failed: Not a library item or missing database ID.", basicItemData);
+                    showStatus("Error: Cannot edit item, invalid data.", 'error');
+                    return;
+                }
+                openItemFormModal('edit', basicItemData);
+                break;
+
+            case 'delete':
+                // Delete action only applies to library items which MUST have a database id
+                if (!isLibraryItem || !basicItemData.id) {
+                    console.error("Delete action failed: Not a library item or missing database ID.", basicItemData);
+                    showStatus("Error: Cannot delete item, invalid data.", 'error');
+                    return;
+                }
+                openDeleteConfirmModal(basicItemData.id, basicItemData.title);
+                break;
+
+                case 'details':
+                    const mediaType = basicItemData.mediaType || basicItemData.type; // Get type
+                    const externalApiId = basicItemData.mediaId;
+    
+                    // Ensure we have the necessary ID to make the API call
+                    if (!externalApiId) {
+                        showStatus(`Cannot fetch details: Missing external media ID.`, 'error');
+                        console.error("Missing externalApiId for details:", basicItemData);
+                        await openDetailsModal(basicItemData, isLibraryItem);
+                        return;
+                    }
+    
+                    // Show loading state
+                    openModal(infoModal, '<div class="modal-loading">Loading details... <div class="spinner"></div></div>');
+    
+                    try {
+                        // Fetch detailed data using the CORRECT externalApiId
+                        // This now works for all types handled by the backend route
+                        const detailedData = await apiRequest(`/details/${mediaType}/${externalApiId}`);
+    
+                        // Merge basic data with detailed data
+                        // (The merging logic should generally work as the backend now returns consistent fields)
+                        const mergedData = {
+                            ...basicItemData,
+                            ...detailedData,
+                            // Ensure core identifiers are correct
+                            mediaType: mediaType,
+                            mediaId: externalApiId, // Store the ID used for the lookup
+                            // Use the normalized rating from the details API if available
+                            rating: detailedData.rating ?? basicItemData.rating ?? null,
+                            // Ensure description uses the one from details if available
+                            description: detailedData.description ?? basicItemData.description ?? basicItemData.apiDescription ?? null,
+    
+                            // Preserve library-specific fields if it is one
+                            ...(isLibraryItem && {
+                                id: basicItemData.id, // Keep DB ID
+                                userStatus: basicItemData.userStatus,
+                                userRating: basicItemData.userRating,
+                                userDescription: basicItemData.userDescription,
+                                addedAt: basicItemData.addedAt,
+                                watchedAt: basicItemData.watchedAt
+                            })
+                        };
+    
+                        // Open the modal with the complete data
+                        await openDetailsModal(mergedData, isLibraryItem);
+    
+                    } catch (error) {
+                         showStatus(`Failed to load details for "${basicItemData.title}". Showing basic info.`, 'error');
+                         // On error loading details, fall back to showing basic info
+                         await openDetailsModal(basicItemData, isLibraryItem);
+                    }
+                    break; // End case 'details'
         }
     }
 
+    // Delegate clicks within the main info modal
+    function handleInfoModalClick(event) {
+        const target = event.target;
+
+        // Close buttons
+        if (target.matches('.modal-close-btn') || target.matches('.modal-cancel-btn')) {
+            closeModal(infoModal);
+        }
+        // Handle actions *inside* the modal (e.g., if details modal has add/edit buttons)
+        else if (target.matches('.action-add')) {
+             const itemData = JSON.parse(target.closest('.modal-actions')?.dataset.itemJson || '{}');
+             closeModal(infoModal); // Close details
+             setTimeout(() => openItemFormModal('add', itemData), 50); // Open add form after small delay
+        }
+        else if (target.matches('.action-edit')) {
+             const itemData = JSON.parse(target.closest('.modal-actions')?.dataset.itemJson || '{}');
+             closeModal(infoModal);
+             setTimeout(() => openItemFormModal('edit', itemData), 50);
+        }
+        else if (target.matches('.action-delete')) {
+             const itemData = JSON.parse(target.closest('.modal-actions')?.dataset.itemJson || '{}');
+             closeModal(infoModal);
+             setTimeout(() => openDeleteConfirmModal(itemData.id, itemData.title), 50);
+        }
+
+        // Close on overlay click
+        else if (target === infoModal) {
+            closeModal(infoModal);
+        }
+    }
+
+    // Handle Add/Edit Form Submission (inside infoModal)
+    async function handleItemFormSubmit(event) {
+        event.preventDefault();
+        const form = event.target;
+        const modalErrorEl = form.querySelector('.modal-error-message');
+        modalErrorEl?.classList.add('hidden');
+        showSpinner('modalSpinner', true); // Assuming a spinner exists in the modal
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Get hidden core data needed for add/edit
+        const mode = form.querySelector('#formMode')?.value;
+        const itemId = form.querySelector('#itemId')?.value; // Will be empty string for 'add'
+        const mediaId = form.querySelector('#mediaId')?.value;
+        const mediaType = form.querySelector('#mediaType')?.value;
+        const title = form.querySelector('#coreTitle')?.value;
+        const imageUrl = form.querySelector('#coreImageUrl')?.value;
+        const apiDescription = form.querySelector('#coreApiDescription')?.value;
+
+        const payload = {
+            userStatus: data.userStatus,
+            userRating: data.userRating, // API handles parsing/validation
+            userDescription: data.userDescription,
+        };
+
+        try {
+            let result;
+            if (mode === 'add') {
+                // Add requires core media info + user info
+                const addPayload = {
+                    ...payload,
+                    mediaId,
+                    mediaType,
+                    title,
+                    imageUrl,
+                    apiDescription
+                };
+                result = await apiRequest('/library', 'POST', addPayload);
+                showStatus(`"${result.title}" added successfully!`, 'success');
+            } else { // mode === 'edit'
+                // Edit only sends fields to update
+                result = await apiRequest(`/library/${itemId}`, 'PUT', payload);
+                showStatus(`"${result.title}" updated successfully!`, 'success');
+            }
+            closeModal(infoModal);
+            fetchLibrary(); // Refresh library view
+        } catch (error) {
+            // Display error within the modal
+            const message = error.data?.message || error.message || 'Operation failed.';
+            if (modalErrorEl) {
+                modalErrorEl.textContent = message;
+                modalErrorEl.classList.remove('hidden');
+            } else {
+                showStatus(message, 'error'); // Fallback to main status
+            }
+        } finally {
+             showSpinner('modalSpinner', false);
+        }
+    }
+
+    // Handle Delete Confirmation
+    async function handleDeleteConfirm() {
+        if (!itemToDeleteId) return;
+        showSpinner('deleteSpinner', true); // Assuming spinner in delete modal
+
+        try {
+            await apiRequest(`/library/${itemToDeleteId}`, 'DELETE');
+            showStatus(`Item deleted successfully.`, 'success');
+            closeModal(deleteConfirmModal);
+            fetchLibrary(); // Refresh library
+        } catch (error) {
+            // Error already shown by apiRequest
+             showStatus(`Failed to delete item: ${error.message}`, 'error');
+        } finally {
+            itemToDeleteId = null; // Reset ID
+            showSpinner('deleteSpinner', false);
+        }
+    }
+
+    // Handle Library Fetching and Filtering
+    async function fetchLibrary() {
+        if (!resultsArea) return;
+        showSpinner('librarySpinner', true);
+        // Use placeholder rendering during load
+        await renderItems([], resultsArea, 'mediaCard', { hidePlaceholder: true });
+        resultsArea.classList.add('loading'); // Optional: for styling
+
+        const params = new URLSearchParams();
+        if (libraryControls) {
+            // Get values directly from filter elements by ID
+            const mediaTypeSelect = libraryControls.querySelector('#filterMediaType');
+            const statusSelect = libraryControls.querySelector('#filterStatus');
+            const minRatingInput = libraryControls.querySelector('#filterMinRating');
+            const maxRatingInput = libraryControls.querySelector('#filterMaxRating');
+
+            if (mediaTypeSelect?.value) {
+                params.append('mediaType', mediaTypeSelect.value);
+            }
+            if (statusSelect?.value) {
+                params.append('userStatus', statusSelect.value);
+            }
+            if (minRatingInput?.value) {
+                params.append('minRating', minRatingInput.value);
+            }
+            if (maxRatingInput?.value) {
+                params.append('maxRating', maxRatingInput.value);
+            }
+        }
+        const queryParams = params.toString() ? `?${params.toString()}` : ''; // Add '?' only if params exist
+
+        try {
+            const items = await apiRequest(`/library${queryParams}`, 'GET');
+            await renderItems(items, resultsArea, 'mediaCard', {
+                 isSearchResult: false,
+                 cardClass: 'library-card',
+                 placeholder: 'Library is empty or filters match no items.'
+             });
+        } catch (error) {
+            // Error already shown by apiRequest
+            await renderItems([], resultsArea, 'mediaCard', {
+                 isSearchResult: false,
+                 cardClass: 'library-card',
+                 placeholder: 'Error loading library.'
+             });
+        } finally {
+            showSpinner('librarySpinner', false);
+            resultsArea.classList.remove('loading');
+        }
+    }
+
+    // Handle Search
+    async function handleSearch(event) {
+        event.preventDefault();
+        if (!resultsArea || !searchForm) return;
+
+        const queryInput = searchForm.querySelector('#searchQuery');
+        const typeSelect = searchForm.querySelector('#searchType');
+        const query = queryInput.value.trim();
+        const type = typeSelect.value;
+
+        if (!query) {
+            showStatus('Please enter a search term.', 'error');
+            queryInput.focus();
+            return;
+        }
+
+        showSpinner('searchSpinner', true);
+        await renderItems([], resultsArea, 'mediaCard', { hidePlaceholder: true }); // Clear previous results
+        resultsArea.classList.add('loading');
+
+        try {
+            const results = await apiRequest(`/search?query=${encodeURIComponent(query)}&type=${type}`, 'GET');
+            await renderItems(results, resultsArea, 'mediaCard', {
+                 isSearchResult: true,
+                 cardClass: 'result-card',
+                 placeholder: 'No results found.'
+             });
+        } catch (error) {
+            // Error handled by apiRequest
+             await renderItems([], resultsArea, 'mediaCard', {
+                 isSearchResult: true,
+                 cardClass: 'result-card',
+                 placeholder: 'Search failed.'
+             });
+        } finally {
+            showSpinner('searchSpinner', false);
+            resultsArea.classList.remove('loading');
+        }
+    }
+
+    // Handle Login
+    async function handleLogin(event) {
+         event.preventDefault();
+         const form = event.target;
+         const username = form.username.value.trim();
+         const password = form.password.value.trim();
+         const errorEl = form.querySelector('#loginError') || form.querySelector('.form-error'); // General error element
+         errorEl?.classList.add('hidden');
+
+         if (!username || !password) {
+            if(errorEl){ errorEl.textContent = 'Username and password required.'; errorEl.classList.remove('hidden'); }
+             return;
+         }
+
+         try {
+             showSpinner('loginSpinner', true); // Assuming spinner ID
+             const result = await apiRequest('/auth/login', 'POST', { username, password });
+             if (result && result.user) {
+                 showStatus('Login successful! Redirecting...', 'success');
+                 window.location.href = '/library'; // Redirect
+             }
+             // Shouldn't reach here if successful due to redirect, but good practice
+         } catch (error) {
+             const message = error.data?.message || error.message || 'Login failed.';
+             if(errorEl){ errorEl.textContent = message; errorEl.classList.remove('hidden'); }
+         } finally {
+            showSpinner('loginSpinner', false);
+         }
+    }
+
+    // Handle Registration
     async function handleRegister(event) {
         event.preventDefault();
         const form = event.target;
         const username = form.username.value.trim();
         const password = form.password.value.trim();
-        // Get elements reliably
-        const errorEl = document.getElementById('registerError');
-        const messageEl = document.getElementById('registerMessage');
-    
-        // Hide messages initially IF elements exist
-        if(errorEl) errorEl.classList.add('hidden');
-        if(messageEl) messageEl.classList.add('hidden');
-    
-        // --- Validation ---
-        if (!username || !password) return displayStatus('Username and password required.', true);
-        if (password.length < 6) {
-            if (errorEl) { // Check if element exists before setting text
-                errorEl.textContent = 'Password must be at least 6 characters.';
-                errorEl.classList.remove('hidden');
-            } else {
-                 displayStatus('Password must be at least 6 characters.', true); // Fallback status
-            }
-            return;
-        }
-    
-        // --- API Call ---
-        const result = await makeApiRequest('/auth/register', 'POST', { username, password });
-    
-        // --- Handle Response ---
-        if (result) {
-            if (messageEl) { // Check if element exists
-                messageEl.textContent = result.message || `User ${username} registered! Please login.`;
-                messageEl.classList.remove('hidden');
-            } else {
-                displayStatus(result.message || `User ${username} registered! Please login.`, false, true); // Fallback
-            }
-            form.reset();
-        } else {
-             // Display error from status or response
-             const apiErrorMsg = statusMessage.textContent.includes('Error:')
-                               ? statusMessage.textContent.replace('Status: Error: ', '')
-                               : 'Registration failed. Please try again.';
-             if (errorEl) { // Check if element exists
-                 errorEl.textContent = apiErrorMsg;
-                 errorEl.classList.remove('hidden');
-             } else {
-                 displayStatus(apiErrorMsg, true); // Fallback
-             }
-        }
-    }
-    
-    async function handleLogin(event) {
-        event.preventDefault();
-        const form = event.target;
-        const username = form.username.value.trim();
-        const password = form.password.value.trim();
-        const errorEl = document.getElementById('loginError');
+        const errorEl = form.querySelector('#registerError') || form.querySelector('.form-error');
+        const messageEl = form.querySelector('#registerMessage') || form.querySelector('.form-message');
         errorEl?.classList.add('hidden');
+        messageEl?.classList.add('hidden');
 
-        if (!username || !password) return displayStatus('Username and password required.', true);
 
-        const result = await makeApiRequest('/auth/login', 'POST', { username, password });
-        if (result && result.user) {
-            displayStatus('Login successful! Redirecting...', false, true);
-            // Redirect to library page after successful login
-            window.location.href = '/library';
-        } else {
-            errorEl.textContent = statusMessage.textContent.replace('Status: Error: ',''); // Display API error
-            errorEl.classList.remove('hidden');
-        }
-    }
-
-    async function handleSearch(event) {
-        event.preventDefault();
-        const form = event.target;
-        const query = form.querySelector('#searchQuery').value.trim();
-        const type = form.querySelector('#searchType').value;
-        const resultsTarget = getResultsArea();
-
-        if (!query) return displayStatus('Search query required.', true);
-        if (!resultsTarget) return; // Should be on library page
-
-        resultsTarget.classList.add('loading');
-        resultsTarget.innerHTML = '<p class="placeholder-text">Searching...</p>';
-
-        const results = await makeApiRequest(`/search?query=${encodeURIComponent(query)}&type=${type}`, 'GET');
-
-        if (results !== null) {
-            renderResults(results, resultsTarget, 'mediaCard', 'result-card', 'No results found.');
-        } else {
-            renderResults([], resultsTarget, 'mediaCard', 'result-card', 'Failed to fetch search results.');
-        }
-    }
-
-    // --- NEW: Handle click on a media card (not buttons inside) ---
-    function handleCardClick(event) {
-        const card = event.currentTarget; // The card element itself
-        const itemDataString = card.dataset.itemData;
-        if (!itemDataString) {
-            console.error('Could not find item data on clicked card.');
-            return;
-        }
-        try {
-            const item = JSON.parse(itemDataString);
-            console.log('Card clicked, item data:', item);
-                // Determine if it's a library item or search result
-            const isLibrary = card.classList.contains('library-card');
-            openDetailsModal(item, isLibrary);
-        } catch (e) {
-                console.error('Failed to parse item data from card:', e);
-        }
-    }
-    
-    async function fetchLibrary() {
-        const resultsTarget = getResultsArea();
-        if (!resultsTarget) return; // Not on library page
-
-        resultsTarget.classList.add('loading');
-        resultsTarget.innerHTML = '<p class="placeholder-text">Loading library...</p>';
-
-        // Build query string from filters
-        const controls = getLibraryControls();
-        let queryParams = [];
-        if(controls){
-             const mediaType = controls.querySelector('#filterMediaType').value;
-             const status = controls.querySelector('#filterStatus').value;
-             const minRating = controls.querySelector('#filterMinRating').value;
-             const maxRating = controls.querySelector('#filterMaxRating').value;
-             if (mediaType) queryParams.push(`mediaType=${mediaType}`);
-             if (status) queryParams.push(`userStatus=${status}`);
-             if (minRating) queryParams.push(`minRating=${minRating}`);
-             if (maxRating) queryParams.push(`maxRating=${maxRating}`);
-        }
-        const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-
-        const items = await makeApiRequest(`/library${queryString}`, 'GET');
-        if (items !== null) {
-            renderResults(items, resultsTarget, 'mediaCard', 'library-card', 'Your library is empty.');
-        } else {
-             renderResults([], resultsTarget, 'mediaCard', 'library-card', 'Could not load library.');
-        }
-    }
-
-    // --- Modal Handling ---
-    async function openAddItemModal(data) {
-        const modal = getAddItemModal();
-        const contentArea = getModalContentArea();
-        if (!modal || !contentArea) return;
-
-        contentArea.innerHTML = 'Loading...'; // Placeholder while template loads
-        modal.classList.remove('hidden'); // Show modal structure immediately
-
-        const template = await getTemplate('addItemModal');
-        if (!template) {
-            contentArea.innerHTML = '<p class="error">Error loading modal content.</p>';
-            return;
-        }
-
-        console.log(data.mediaType); // Debugging line
-        console.log(getValidStatuses(data.mediaType)); // Debugging line
-        // Prepare data for the modal template
-        const templateData = {
-            itemTitle: data.title,
-            mediaId: data.mediaId,
-            mediaType: data.mediaType,
-            imageUrl: data.imageUrl,
-            apiDescription: data.apiDescription,
-            validStatuses: getValidStatuses(data.mediaType)
-        };
-
-        contentArea.innerHTML = template(templateData);
-
-        // Add specific listeners for the newly added modal elements
-        contentArea.querySelector('#addItemForm')?.addEventListener('submit', handleAddItemSubmit);
-        contentArea.querySelector('#modalCloseBtn')?.addEventListener('click', closeAddItemModal);
-        contentArea.querySelector('#modalCancelBtn')?.addEventListener('click', closeAddItemModal);
-    }
-
-    // --- NEW: Open Details Modal ---
-    async function openDetailsModal(item, isLibraryItem) {
-        const modal = getInfoModal(); // Target the generic modal overlay
-        const contentArea = modal?.querySelector('#modalContentArea'); // Target content area
-        if (!modal || !contentArea) return;
-
-        contentArea.innerHTML = 'Loading details...';
-        modal.classList.remove('hidden'); // Show modal overlay
-
-        const template = await getTemplate('mediaDetailsModal');
-        if (!template) {
-             contentArea.innerHTML = '<p class="error">Error loading details template.</p>';
+        if (!username || !password) {
+             if(errorEl){ errorEl.textContent = 'Username and password required.'; errorEl.classList.remove('hidden'); }
              return;
-        }
+         }
+         if (password.length < 6) {
+             if(errorEl){ errorEl.textContent = 'Password must be at least 6 characters.'; errorEl.classList.remove('hidden'); }
+             return;
+         }
 
-        // Prepare data for the details template
-        const templateData = {
-            item: {
-                ...item,
-                // Ensure consistent naming used by the template
-                mediaType: item.type || item.mediaType,
-                apiDescription: item.description || item.apiDescription || ''
-            },
-            isLibraryItem: isLibraryItem
-        };
-
-        contentArea.innerHTML = template(templateData);
-
-        // Add listeners for elements INSIDE the details modal
-        contentArea.querySelector('#modalCloseBtn')?.addEventListener('click', closeInfoModal);
-        contentArea.querySelector('#modalCancelBtn')?.addEventListener('click', closeInfoModal); // Close button
-
-        // Re-attach handlers for action buttons IF they exist in this modal
-        contentArea.querySelector('.add-to-library-btn')?.addEventListener('click', handleOpenAddItemModalFromDetails); // Special handler needed
-        contentArea.querySelector('.edit-library-item-btn')?.addEventListener('click', handleEditLibraryItem);
-        contentArea.querySelector('.delete-library-item-btn')?.addEventListener('click', handleDeleteLibraryItem);
-    }
-
-    // --- NEW: Close Generic Info Modal ---
-    function closeInfoModal() {
-        const modal = getInfoModal();
-        modal?.classList.add('hidden');
-        const contentArea = modal?.querySelector('#modalContentArea');
-        if(contentArea) contentArea.innerHTML = ''; // Clear content
-    }
-
-
-    // --- NEW: Handler to open ADD modal from DETAILS modal ---
-    function handleOpenAddItemModalFromDetails(event) {
-        const button = event.target.closest('.add-to-library-btn');
-        if (!button) return;
-         // Data is already on the button from the details template rendering
-        const itemData = {
-            mediaId: button.dataset.mediaId,
-            mediaType: button.dataset.mediaType,
-            title: button.dataset.title,
-            imageUrl: button.dataset.imageUrl,
-            apiDescription: button.dataset.apiDescription,
-        };
-         closeInfoModal(); // Close the details modal first
-         // Short delay to allow closing animation
-         setTimeout(() => {
-             openAddItemModal(itemData); // Now open the add item modal
-         }, 100); // Adjust delay if needed
-    }
-
-     function closeAddItemModal() {
-        const modal = getAddItemModal();
-        modal?.classList.add('hidden');
-        const contentArea = getModalContentArea();
-        if(contentArea) contentArea.innerHTML = ''; // Clear content
-    }
-
-    async function handleOpenModalClick(event) {
-        const button = event.target.closest('.add-to-library-btn'); // Find button even if icon inside is clicked
-        if (!button) return;
-
-        const itemData = {
-            mediaId: button.dataset.mediaId,
-            mediaType: button.dataset.mediaType,
-            title: button.dataset.title,
-            imageUrl: button.dataset.imageUrl,
-            apiDescription: button.dataset.apiDescription,
-        };
-        openAddItemModal(itemData);
-    }
-
-     async function handleAddItemSubmit(event) {
-        event.preventDefault();
-        const form = event.target;
-        const modalError = form.querySelector('#modalError');
-        modalError?.classList.add('hidden');
-
-        const userStatus = form.querySelector('#modalUserStatus').value;
-        const userRatingInput = form.querySelector('#modalUserRating').value;
-        const userDescription = form.querySelector('#modalUserDescription').value.trim();
-
-        const mediaId = form.querySelector('#modalMediaId').value;
-        const mediaType = form.querySelector('#modalMediaType').value;
-        const title = form.querySelector('#modalTitleData').value;
-        const imageUrl = form.querySelector('#modalImageUrlData').value;
-        const apiDescription = form.querySelector('#modalApiDescriptionData').value;
-
-        let userRating = null;
-        if (userRatingInput) {
-            userRating = parseInt(userRatingInput, 10);
-            if (isNaN(userRating) || userRating < 1 || userRating > 20) {
-                modalError.textContent = 'Rating must be between 1 and 20.';
-                modalError.classList.remove('hidden');
-                return;
-            }
-        }
-        // Construct payload for API
-        const payload = {
-            mediaId, mediaType, title, imageUrl, apiDescription, // Core data
-            userStatus, // User input
-            ...(userRating !== null && { userRating }), // Optional user input
-            ...(userDescription && { userDescription }) // Optional user input
-        };
-
-        const result = await makeApiRequest('/library', 'POST', payload);
-
-        if (result) {
-            displayStatus(`"${title}" added to library!`, false, true);
-            closeAddItemModal();
-            fetchLibrary();
-        } else {
-             if(modalError){
-                 modalError.textContent = statusMessage.textContent.replace('Status: Error: ', '');
-                 modalError.classList.remove('hidden');
-             }
-        }
-    }
-
-    // --- Edit/Delete Handlers (Keep prompt-based for brevity, or upgrade later) ---
-    async function handleEditLibraryItem(event) {
-        const button = event.target.closest('.edit-library-item-btn');
-        if (!button) return;
-        const itemId = button.dataset.id;
-        closeInfoModal();
-        // In a real app, you'd fetch the item details first to pre-fill prompts
-        // and know the mediaType to validate status.
-        // For simplicity, we'll ask for everything again.
-
-        const userStatus = prompt(`Enter new status (e.g., watched, reading, playing) or leave blank for no change:`);
-        const userRatingInput = prompt(`Enter new rating (1-20) or leave blank for no change:`);
-        const userDescription = prompt(`Enter new description or leave blank for no change:`);
-
-        const updateData = {};
-        if (userStatus) updateData.userStatus = userStatus.trim().toLowerCase(); // Basic validation needed based on type!
-        if (userRatingInput) {
-            const rating = parseInt(userRatingInput, 10);
-             if (!isNaN(rating) && rating >= 1 && rating <= 20) {
-                updateData.userRating = rating;
+         try {
+             showSpinner('registerSpinner', true); // Assuming spinner ID
+             const result = await apiRequest('/auth/register', 'POST', { username, password });
+             if (messageEl) {
+                messageEl.textContent = result.message || 'Registration successful! Please login.';
+                messageEl.classList.remove('hidden');
              } else {
-                 return displayStatus('Invalid rating entered.', true);
+                 showStatus('Registration successful! Please login.', 'success');
              }
-        }
-        // Allow setting description to empty string if user enters something then clears it?
-        // Current prompt returns null if cancelled, empty string if OK'd with no text.
-        if (userDescription !== null) { // Check if prompt wasn't cancelled
-             updateData.userDescription = userDescription.trim();
-        }
+             form.reset(); // Clear form on success
+         } catch (error) {
+             const message = error.data?.message || error.message || 'Registration failed.';
+              if(errorEl){ errorEl.textContent = message; errorEl.classList.remove('hidden'); }
+         } finally {
+             showSpinner('registerSpinner', false);
+         }
+    }
 
-
-        if (Object.keys(updateData).length === 0) {
-             return displayStatus('No changes entered.');
-        }
-
-         // ** Crucial: Backend needs to validate status based on item's mediaType **
-         // Frontend can't easily do this without fetching item first.
-
-        const result = await makeApiRequest(`/library/${itemId}`, 'PUT', updateData, true);
-        if (result) {
-            displayStatus(`Library item ${itemId} updated.`);
-            fetchLibrary(); // Refresh view
-        }
-     }
-
-
-    async function handleDeleteLibraryItem(event) {
-         const button = event.target.closest('.delete-library-item-btn');
-        if (!button) return;
-        const itemId = button.dataset.id;
-        closeInfoModal();
-        if (!confirm(`Are you sure you want to delete library item ${itemId}?`)) return;
-
-        const result = await makeApiRequest(`/library/${itemId}`, 'DELETE');
-        if (result) {
-            displayStatus(`Library item ${itemId} deleted.`, false, true);
-            fetchLibrary(); // Refresh view
+    // Handle Logout
+    async function handleLogout() {
+        try {
+            showStatus('Logging out...', 'info');
+            await apiRequest('/auth/logout', 'POST');
+            showStatus('Logout successful. Redirecting...', 'success');
+            window.location.href = '/'; // Redirect to home
+        } catch (error) {
+            // Error already shown by apiRequest
+            showStatus('Logout failed.', 'error');
         }
     }
 
-     // --- Helper to get valid statuses (no changes) ---
+     // Helper to get valid statuses based on media type (client-side)
      function getValidStatuses(mediaType) {
-        switch (mediaType) {
+        switch (mediaType?.toLowerCase()) {
             case 'movie':
             case 'series': return ['to watch', 'watching', 'watched'];
             case 'book': return ['to read', 'reading', 'read'];
             case 'video game': return ['to play', 'playing', 'played'];
-            default: return [];
+            default: return ['to watch', 'watching', 'watched', 'to read', 'reading', 'read', 'to play', 'playing', 'played']; // Default or fallback
         }
     }
 
-    // --- Initialize Page ---
-    function initializePage() {
-        console.log('Initializing page...');
-
+    // --- Initialization ---
+    function initialize() {
         // Global Listeners
         logoutBtn?.addEventListener('click', handleLogout);
-        getAddItemModal()?.addEventListener('click', (event) => { // Close modal on overlay click
-            if (event.target === getAddItemModal()) closeAddItemModal();
+
+        // Use event delegation on main content area for dynamic elements
+        mainContent?.addEventListener('click', handleMainContentClick);
+
+        // Modal Listeners (delegated or direct)
+        infoModal?.addEventListener('click', handleInfoModalClick);
+        infoModal?.addEventListener('submit', (event) => { // Handle form submission inside modal
+            if (event.target.id === 'itemForm') {
+                handleItemFormSubmit(event);
+            }
         });
 
-        // Page Specific Listeners
-        const pathname = window.location.pathname;
-
-        if (pathname === '/login') {
-            getLoginForm()?.addEventListener('submit', handleLogin);
-            getRegisterForm()?.addEventListener('submit', handleRegister);
-        } else if (pathname === '/library') {
-            getSearchForm()?.addEventListener('submit', handleSearch);
-            const controls = getLibraryControls();
-            if (controls) {
-                controls.querySelector('#getLibraryBtn')?.addEventListener('click', fetchLibrary);
-                controls.querySelector('#filterMediaType')?.addEventListener('change', fetchLibrary);
-                controls.querySelector('#filterStatus')?.addEventListener('change', fetchLibrary);
-                controls.querySelector('#filterMinRating')?.addEventListener('input', fetchLibrary); // Use input for faster feedback? Debounce?
-                controls.querySelector('#filterMaxRating')?.addEventListener('input', fetchLibrary);
+        deleteConfirmModal?.addEventListener('click', (event) => {
+            if (event.target.matches('#deleteConfirmBtn')) handleDeleteConfirm();
+            if (event.target.matches('#deleteCancelBtn') || event.target.matches('#deleteModalCloseBtn') || event.target === deleteConfirmModal) {
+                 closeModal(deleteConfirmModal);
+                 itemToDeleteId = null; // Clear ID on cancel/close
             }
+        });
 
-            // Event delegation for dynamic results area content
-            const resultsTarget = getResultsArea();
-            resultsTarget?.addEventListener('click', handleOpenModalClick);
-            resultsTarget?.addEventListener('click', handleEditLibraryItem);
-            resultsTarget?.addEventListener('click', handleDeleteLibraryItem);
 
-            // Initial library load
-            fetchLibrary();
+        // Page Specific Initializations / Listeners
+        if (searchForm) {
+            searchForm.addEventListener('submit', handleSearch);
         }
+
+        if (libraryControls) {
+            // Use event delegation or listen to specific inputs for filtering
+            libraryControls.addEventListener('change', fetchLibrary); // Fetch on any filter change
+            libraryControls.addEventListener('input', (e) => { // Handle input for range filters if needed (debounced?)
+                if (e.target.type === 'number') {
+                     fetchLibrary(); // Basic fetch on number input change
+                     // Add debounce here if API calls become too frequent
+                }
+            });
+             libraryControls.querySelector('#getLibraryBtn')?.addEventListener('click', fetchLibrary); // Refresh button
+
+            // Initial library load on library page
+            if (window.location.pathname === '/library') {
+                fetchLibrary();
+            }
+        }
+
+        if (loginForm) {
+            loginForm.addEventListener('submit', handleLogin);
+        }
+        if (registerForm) {
+            registerForm.addEventListener('submit', handleRegister);
+        }
+
+        console.log('MediaTracker Initialized.');
     }
 
-    // --- Run Initialization ---
-    initializePage();
+    // Wait for DOM content to be loaded before initializing
+    document.addEventListener('DOMContentLoaded', initialize);
 
-})(); // End IIFE
+})();
 ```
 
 ### viewRoutes.js
@@ -2243,68 +2398,63 @@ header {
 // routes/viewRoutes.js
 const express = require('express');
 const path = require('path');
-const { requireLogin } = require('../auth'); // Middleware to protect routes
+const fs = require('fs').promises; // Use promise-based fs
+const { requireLogin, checkAuthStatus } = require('../auth');
 
 const router = express.Router();
 
+// Middleware to add user status to all view routes
+router.use(checkAuthStatus);
+
 // --- Public Routes ---
 router.get('/', (req, res) => {
-    res.render('home', { // Render views/home.hbs
-        pageTitle: 'Welcome'
-        // user is automatically available from res.locals.user via checkAuthStatus middleware
-    });
+    res.render('home', { pageTitle: 'Welcome' });
 });
 
 router.get('/about', (req, res) => {
-    res.render('about', {
-        pageTitle: 'About Us'
-    });
+    res.render('about', { pageTitle: 'About Us' });
 });
 
 router.get('/login', (req, res) => {
-    // If user is already logged in, redirect to library
-    if (res.locals.user) {
+    if (res.locals.user) { // Redirect if already logged in
         return res.redirect('/library');
     }
-    res.render('login', { // Render views/login.hbs
-        pageTitle: 'Login / Register',
-        layout: 'main' // Explicitly use main layout (usually default)
-    });
+    res.render('login', { pageTitle: 'Login / Register' });
 });
 
-// --- Protected Routes (Require Login) ---
-// Apply requireLogin middleware to all routes below this point in this router,
-// OR apply it individually as shown for /library
-// router.use(requireLogin);
-
-router.get('/library', requireLogin, (req, res) => { // Apply middleware here
-    // User is guaranteed to be logged in by requireLogin
-    res.render('library', { // Render views/library.hbs
+// --- Protected Routes ---
+router.get('/library', requireLogin, (req, res) => {
+    res.render('library', {
         pageTitle: 'My Library',
-        username: res.locals.user.username // Pass username to the template if needed
+        // username is available via res.locals.user automatically passed by Handlebars
     });
 });
 
-// Route to serve client-side Handlebars templates (if not pre-compiling)
-// This allows fetching templates via JS
-router.get('/templates/:templateName', requireLogin, (req, res) => {
+// --- Route to Serve Client-Side Handlebars Partials ---
+// Consider security implications: only allow known partials.
+const ALLOWED_PARTIALS = new Set(['mediaCard', 'itemFormModal', 'mediaDetailsModal']);
+const partialsDir = path.join(__dirname, '../views/partials');
+
+router.get('/templates/:templateName', requireLogin, async (req, res) => {
     const templateName = req.params.templateName;
-    // Basic security: only allow specific template names
-    const allowedTemplates = ['mediaCard', 'addItemModal', 'libraryCard', 'mediaDetailsModal'];
-    if (!allowedTemplates.includes(templateName)) {
-        return res.status(404).send('Template not found');
-    }
-    // Render the partial directly - needs specific setup or just send file
-    // Simpler: Send the file content
-    const filePath = path.join(__dirname, `../views/partials/${templateName}.hbs`);
-    res.sendFile(filePath, (err) => {
-        if (err) {
-            console.error("Error sending template file:", err);
-            res.status(404).send('Template not found');
-        }
-    });
-});
 
+    if (!ALLOWED_PARTIALS.has(templateName)) {
+        return res.status(404).send('Template not found or not allowed.');
+    }
+
+    const filePath = path.join(partialsDir, `${templateName}.hbs`);
+
+    try {
+        // Check if file exists before sending
+        await fs.access(filePath); // Throws if file doesn't exist
+        // Set appropriate content type
+        res.type('text/html'); // Or 'text/x-handlebars-template'
+        res.sendFile(filePath);
+    } catch (error) {
+        console.error(`Error serving template ${templateName}:`, error);
+        res.status(404).send('Template not found.');
+    }
+});
 
 module.exports = router;
 ```
@@ -2312,101 +2462,84 @@ module.exports = router;
 ### authRoutes.js
 
 ```js
+// routes/api/authRoutes.js
 const express = require('express');
-const db = require('../../database'); // Import the database connection
+const db = require('../../dbUtils'); // Use the promisified utils
 const { hashPassword, comparePassword, setAuthCookie, clearAuthCookie } = require('../../auth');
 
 const router = express.Router();
 
-// --- Register a New User ---
+// --- Register ---
 router.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
-    // Basic validation
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
     }
-    if (password.length < 6) { // Example: Minimum password length
+    if (password.length < 6) {
          return res.status(400).json({ message: 'Password must be at least 6 characters long.' });
     }
 
     try {
-        // Check if username already exists
-        const checkUserSql = `SELECT id FROM users WHERE username = ?`;
-        db.get(checkUserSql, [username], async (err, row) => {
-            if (err) {
-                console.error("Database error checking username:", err.message);
-                return res.status(500).json({ message: 'Error checking username.' });
-            }
-            if (row) {
-                return res.status(409).json({ message: 'Username already taken.' }); // 409 Conflict
-            }
+        // Check if username exists
+        const existingUser = await db.get(`SELECT id FROM users WHERE username = ?`, [username]);
+        if (existingUser) {
+            return res.status(409).json({ message: 'Username already taken.' }); // 409 Conflict
+        }
 
-            // Hash the password
-            const passwordHash = await hashPassword(password);
+        // Hash password
+        const passwordHash = await hashPassword(password);
 
-            // Insert the new user
-            const insertSql = `INSERT INTO users (username, passwordHash) VALUES (?, ?)`;
-            db.run(insertSql, [username, passwordHash], function(err) { // Use function() to access this.lastID
-                if (err) {
-                    console.error("Database error registering user:", err.message);
-                    return res.status(500).json({ message: 'Failed to register user.' });
-                }
-                // Return basic user info (excluding password)
-                res.status(201).json({
-                    id: this.lastID, // Get the ID of the inserted row
-                    username: username,
-                    message: 'User registered successfully.'
-                 });
-            });
-        });
+        // Insert user
+        const result = await db.run(`INSERT INTO users (username, passwordHash) VALUES (?, ?)`, [username, passwordHash]);
+
+        res.status(201).json({
+            id: result.lastID,
+            username: username,
+            message: 'User registered successfully. Please login.'
+         });
+
     } catch (error) {
-        console.error("Error during registration:", error);
-        res.status(500).json({ message: 'Server error during registration.' });
+        console.error("Registration Error:", error);
+        // dbUtils throws specific errors we might catch if needed
+        res.status(500).json({ message: error.message || 'Server error during registration.' });
     }
 });
 
-// --- Login User ---
-router.post('/login', (req, res) => {
+// --- Login ---
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ message: 'Username and password are required.' });
     }
 
-    const sql = `SELECT id, username, passwordHash FROM users WHERE username = ?`;
-    db.get(sql, [username], async (err, user) => {
-        if (err) {
-            console.error("Database error during login:", err.message);
-            return res.status(500).json({ message: 'Error logging in.' });
-        }
+    try {
+        // Find user
+        const user = await db.get(`SELECT id, username, passwordHash FROM users WHERE username = ?`, [username]);
         if (!user) {
-            // User not found
-            return res.status(401).json({ message: 'Invalid credentials.' });
+            return res.status(401).json({ message: 'Invalid credentials.' }); // User not found
         }
 
-        try {
-            // Compare the provided password with the stored hash
-            const isMatch = await comparePassword(password, user.passwordHash);
-
-            if (!isMatch) {
-                // Password doesn't match
-                return res.status(401).json({ message: 'Invalid credentials.' });
-            }
-
-            // Passwords match - Generate JWT
-            setAuthCookie(res, { id: user.id, username: user.username });
-
-            res.status(200).json({
-                message: 'Login successful.',
-                user: { id: user.id, username: user.username }
-            });
-
-        } catch (error) {
-            console.error("Error comparing password or generating token:", error);
-            res.status(500).json({ message: 'Server error during login process.' });
+        // Compare password
+        const isMatch = await comparePassword(password, user.passwordHash);
+        if (!isMatch) {
+            return res.status(401).json({ message: 'Invalid credentials.' }); // Password mismatch
         }
-    });
+
+        // Set auth cookie
+        const userData = { id: user.id, username: user.username };
+        setAuthCookie(res, userData);
+
+        res.status(200).json({
+            message: 'Login successful.',
+            user: userData
+        });
+
+    } catch (error) {
+        console.error("Login Error:", error);
+        res.status(500).json({ message: error.message || 'Server error during login.' });
+    }
 });
 
 // --- Logout ---
@@ -2415,329 +2548,599 @@ router.post('/logout', (req, res) => {
     res.status(200).json({ message: 'Logout successful.' });
 });
 
+module.exports = router;
+```
+
+### detailsRoutes.js
+
+```js
+// routes/api/detailsRoutes.js
+const express = require('express');
+const axios = require('axios');
+require('dotenv').config();
+const { getIgdbHeaders } = require('./igdbAuthHelper');
+
+const router = express.Router();
+
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+const GOOGLE_BOOKS_BASE_URL = 'https://www.googleapis.com/books/v1/volumes';
+const IGDB_BASE_URL = 'https://api.igdb.com/v4';
+
+// Helper to fetch data safely
+const fetchData = async (url, config = {}) => {
+    try {
+        const response = await axios.get(url, config);
+        return response.data;
+    } catch (error) {
+        console.error(`API fetch error for ${url}: ${error.response?.status || error.message}`);
+        // Return specific error info if possible
+        const errorData = { failed: true, status: error.response?.status, message: error.message };
+        return errorData;
+    }
+};
+
+// Helper to make IGDB POST requests safely
+const fetchIgdbData = async (endpoint, body) => {
+    let headers;
+    try {
+        headers = await getIgdbHeaders(); // Get auth headers
+    } catch(authError) {
+        console.error("IGDB Auth Error during header retrieval:", authError.message);
+         // Return structure indicating auth failure
+         return { failed: true, authFailed: true, message: `IGDB Auth Error: ${authError.message}` };
+    }
+
+    try {
+        const response = await axios.post(`${IGDB_BASE_URL}${endpoint}`, body, {
+            headers: { ...headers, 'Content-Type': 'text/plain' }
+         });
+         // Check if IGDB returned an empty array or valid data
+        return response.data && response.data.length > 0 ? response.data[0] : { notFound: true }; // Expecting one result by ID
+    } catch (error) {
+        console.error(`IGDB fetch error for ${endpoint}: ${error.response?.status || error.message}`);
+         return { failed: true, status: error.response?.status, message: error.message };
+    }
+};
+
+
+// Convert various ratings to a 0-20 scale (approx)
+function normalizeRating(rating, scale) {
+    if (rating === null || rating === undefined || isNaN(parseFloat(rating))) {
+        return null;
+    }
+    const numRating = parseFloat(rating);
+    switch (scale) {
+        case 10: // TMDB (0-10)
+            return (numRating * 2).toFixed(1);
+        case 5: // Google Books (0-5)
+            return (numRating * 4).toFixed(1);
+        case 100: // IGDB (0-100)
+            return (numRating / 5).toFixed(1);
+        default:
+            return rating; // Assume already correct scale or unknown
+    }
+}
+
+router.get('/:mediaType/:mediaId', async (req, res) => {
+    const { mediaType, mediaId } = req.params;
+    let combinedDetails = { // Initialize with base info
+        mediaType: mediaType,
+        mediaId: mediaId, // The external ID
+        title: null,
+        description: null,
+        imageUrl: null,
+        releaseDate: null,
+        rating: null, // Normalized rating
+        genres: [],
+        // Type specific fields
+        authors: [], // books
+        publisher: null, // books
+        pageCount: null, // books
+        googleBooksLink: null, // books
+        cast: [], // movies/series
+        producers: [], // movies/series
+        imdbId: null, // movies/series
+        platforms: [], // games
+        developers: [], // games
+        publishers: [], // games
+        screenshots: [], // games
+        videos: [], // games
+        igdbLink: null, // games
+    };
+    let apiResponseData;
+
+    try {
+        // --- Fetch Data based on Type ---
+        switch (mediaType) {
+            case 'movie':
+            case 'series':
+                if (!TMDB_API_KEY) throw new Error('TMDB API Key missing.');
+                const basePath = mediaType === 'movie' ? 'movie' : 'tv';
+                const detailsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}?api_key=${TMDB_API_KEY}&language=en-US`;
+                const creditsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}/credits?api_key=${TMDB_API_KEY}&language=en-US`;
+                const externalIdsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}/external_ids?api_key=${TMDB_API_KEY}`;
+
+                const [detailsData, creditsData, externalIdsData] = await Promise.all([
+                    fetchData(detailsUrl),
+                    fetchData(creditsUrl),
+                    fetchData(externalIdsUrl)
+                ]);
+
+                 // Check for critical failures
+                 if (detailsData?.failed || !detailsData) {
+                     const status = detailsData?.status || 404;
+                     return res.status(status).json({ message: `Details not found on TMDB (${status}).` });
+                 }
+
+                // Populate combinedDetails
+                combinedDetails.title = mediaType === 'movie' ? detailsData.title : detailsData.name;
+                combinedDetails.description = detailsData.overview;
+                combinedDetails.imageUrl = detailsData.poster_path ? `https://image.tmdb.org/t/p/w500${detailsData.poster_path}` : null;
+                combinedDetails.releaseDate = mediaType === 'movie' ? detailsData.release_date : detailsData.first_air_date;
+                combinedDetails.rating = normalizeRating(detailsData.vote_average, 10);
+                combinedDetails.genres = detailsData.genres?.map(g => g.name) || [];
+                combinedDetails.cast = creditsData?.cast?.slice(0, 10).map(c => ({ name: c.name, character: c.character })) || [];
+                combinedDetails.producers = creditsData?.crew?.filter(c => c.job === 'Producer').map(p => p.name) || [];
+                combinedDetails.imdbId = externalIdsData?.imdb_id || null;
+                break;
+
+            case 'book':
+                const bookUrl = `${GOOGLE_BOOKS_BASE_URL}/${mediaId}?${GOOGLE_BOOKS_API_KEY ? 'key=' + GOOGLE_BOOKS_API_KEY : ''}`;
+                apiResponseData = await fetchData(bookUrl);
+
+                if (apiResponseData?.failed || !apiResponseData?.volumeInfo) {
+                    const status = apiResponseData?.status || 404;
+                    return res.status(status).json({ message: `Book details not found on Google Books (${status}).` });
+                }
+
+                const volInfo = apiResponseData.volumeInfo;
+                combinedDetails.title = volInfo.title;
+                combinedDetails.description = volInfo.description;
+                combinedDetails.imageUrl = volInfo.imageLinks?.thumbnail?.replace(/^http:/, 'https') || volInfo.imageLinks?.smallThumbnail?.replace(/^http:/, 'https') || null;
+                combinedDetails.releaseDate = volInfo.publishedDate; // Often just year or YYYY-MM
+                combinedDetails.rating = normalizeRating(volInfo.averageRating, 5);
+                combinedDetails.genres = volInfo.categories || [];
+                combinedDetails.authors = volInfo.authors || [];
+                combinedDetails.publisher = volInfo.publisher || null;
+                combinedDetails.pageCount = volInfo.pageCount || null;
+                combinedDetails.googleBooksLink = volInfo.infoLink || null;
+                break;
+
+            case 'video game':
+                const gameQuery = `
+                    fields name, summary, genres.name, platforms.abbreviation,
+                           first_release_date, involved_companies.company.name,
+                           involved_companies.developer, involved_companies.publisher,
+                           total_rating, cover.url, screenshots.url, videos.video_id, url;
+                    where id = ${mediaId};
+                    limit 1;`;
+                apiResponseData = await fetchIgdbData('/games', gameQuery);
+
+                if (apiResponseData?.failed || apiResponseData?.notFound) {
+                    if(apiResponseData?.authFailed) {
+                         return res.status(503).json({ message: apiResponseData.message }); // Auth problem
+                    }
+                    const status = apiResponseData?.status || 404;
+                     return res.status(status).json({ message: `Game details not found on IGDB (${status}).` });
+                }
+
+                combinedDetails.title = apiResponseData.name;
+                combinedDetails.description = apiResponseData.summary;
+                combinedDetails.imageUrl = apiResponseData.cover?.url
+                    ? apiResponseData.cover.url.replace('t_thumb', 't_cover_big').replace(/^\/\//, 'https://')
+                    : null;
+                combinedDetails.releaseDate = apiResponseData.first_release_date
+                    ? new Date(apiResponseData.first_release_date * 1000).toISOString().split('T')[0] // Convert timestamp
+                    : null;
+                combinedDetails.rating = normalizeRating(apiResponseData.total_rating, 100);
+                combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
+                combinedDetails.platforms = apiResponseData.platforms?.map(p => p.abbreviation || p.name) || []; // Use abbreviation if available
+                combinedDetails.igdbLink = apiResponseData.url || null;
+                 // Extract developers and publishers
+                if (apiResponseData.involved_companies) {
+                    apiResponseData.involved_companies.forEach(ic => {
+                        if (ic.company?.name) {
+                            if (ic.developer) combinedDetails.developers.push(ic.company.name);
+                            if (ic.publisher) combinedDetails.publishers.push(ic.company.name);
+                        }
+                    });
+                    // Remove duplicates
+                    combinedDetails.developers = [...new Set(combinedDetails.developers)];
+                    combinedDetails.publishers = [...new Set(combinedDetails.publishers)];
+                }
+                combinedDetails.screenshots = apiResponseData.screenshots?.map(s => s.url?.replace('t_thumb', 't_screenshot_med').replace(/^\/\//, 'https://')) || [];
+                combinedDetails.videos = apiResponseData.videos?.map(v => ({ youtubeId: v.video_id, youtubeLink: `https://www.youtube.com/watch?v=${v.video_id}` })) || [];
+                break;
+
+            default:
+                return res.status(400).json({ message: 'Invalid media type specified.' });
+        }
+
+        // Return the aggregated details
+        res.status(200).json(combinedDetails);
+
+    } catch (error) {
+        // Catch errors from processing logic or initial API key checks etc.
+        console.error(`Error processing details for ${mediaType} ${mediaId}:`, error);
+        res.status(500).json({ message: error.message || 'Server error while fetching detailed media information.' });
+    }
+});
 
 module.exports = router;
+
+// NOTE: You'll need to create/import `igdbAuthHelper.js` containing the
+// getIgdbAccessToken and getIgdbHeaders functions previously defined in
+// searchRoutes.js or refactor them into a shared location. For simplicity,
+// I've assumed it exists here. You can copy the relevant functions from
+// `searchRoutes.js` into a new `igdbAuthHelper.js` file and export them.
+```
+
+### igdbAuthHelper.js
+
+```js
+// routes/api/searchRoutes.js
+const axios = require('axios');
+require('dotenv').config();
+
+// --- Environment Variable Checks ---
+const IGDB_CLIENT_ID = process.env.IGDB_CLIENT_ID;
+const IGDB_CLIENT_SECRET = process.env.IGDB_CLIENT_SECRET;
+
+const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/token';
+
+// --- IGDB Token Caching ---
+// Simple in-memory cache for the IGDB access token to avoid fetching it on every request.
+let igdbTokenCache = {
+    accessToken: null,
+    expiresAt: 0 // Timestamp (ms) when the token expires
+};
+
+/**
+ * Gets a valid IGDB Access Token, fetching a new one if necessary or expired.
+ * Uses the igdbTokenCache for efficiency.
+ * @returns {Promise<string>} A valid IGDB access token.
+ * @throws {Error} If authentication fails or required credentials are missing.
+ */
+async function getIgdbAccessToken() {
+    const now = Date.now();
+    const bufferTime = 60 * 1000; // 60 seconds buffer before expiry
+
+    // Check cache first
+    if (igdbTokenCache.accessToken && igdbTokenCache.expiresAt > now + bufferTime) {
+        // console.log("Using cached IGDB token."); // Uncomment for debugging
+        return igdbTokenCache.accessToken;
+    }
+
+    // Token is missing, invalid, or expiring soon - fetch a new one
+    console.log("Fetching new IGDB access token...");
+    if (!IGDB_CLIENT_ID || !IGDB_CLIENT_SECRET) {
+        throw new Error('IGDB Client ID or Client Secret missing in .env configuration.');
+    }
+
+    try {
+        // Prepare request to Twitch OAuth endpoint
+        const params = new URLSearchParams();
+        params.append('client_id', IGDB_CLIENT_ID);
+        params.append('client_secret', IGDB_CLIENT_SECRET);
+        params.append('grant_type', 'client_credentials');
+
+        const response = await axios.post(TWITCH_AUTH_URL, params, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        const { access_token, expires_in } = response.data;
+
+        if (!access_token || !expires_in) {
+             throw new Error('Invalid response received from Twitch OAuth token endpoint.');
+        }
+
+        // Update cache
+        igdbTokenCache.accessToken = access_token;
+        // expires_in is in seconds, convert expiry time to milliseconds timestamp
+        igdbTokenCache.expiresAt = now + (expires_in * 1000);
+
+        console.log("Successfully fetched and cached new IGDB token.");
+        return access_token;
+
+    } catch (error) {
+        console.error("Error fetching IGDB token from Twitch:", error.response ? error.response.data : error.message);
+        // Clear cache on failure to force retry next time
+        igdbTokenCache = { accessToken: null, expiresAt: 0 };
+        // Rethrow a user-friendly error
+        const details = error.response?.data?.message || error.message;
+        throw new Error(`Failed to authenticate with IGDB service: ${details}`);
+    }
+}
+
+/**
+ * Constructs the required headers for making requests to the IGDB API.
+ * @returns {Promise<object>} Object containing 'Client-ID' and 'Authorization' headers.
+ * @throws {Error} If token retrieval fails.
+ */
+async function getIgdbHeaders() {
+    // This function relies on getIgdbAccessToken to handle token fetching and errors
+    const accessToken = await getIgdbAccessToken(); // Will throw if it fails
+    return {
+        'Client-ID': IGDB_CLIENT_ID,
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+        // 'Content-Type' might be needed depending on the endpoint (e.g., text/plain for search body)
+    };
+}
+
+// --- Unified Rating Conversion Helper ---
+/**
+ * Converts API rating to a consistent 1-20 scale.
+ * Handles different source scales (e.g., TMDB 0-10, Google 0-5, IGDB 0-100).
+ * @param {number|null|undefined} apiRating The rating from the API.
+ * @param {'tmdb'|'google'|'igdb'} source The API source.
+ * @returns {number|null} Rating on a 1-20 scale, or null if input is invalid/missing.
+ */
+function convertRatingTo20(apiRating, source) {
+    const rating = parseFloat(apiRating);
+    if (isNaN(rating)) return null;
+
+    switch (source) {
+        case 'tmdb': // Scale 0-10
+            return Math.round(rating * 2); // Simple multiply by 2
+        case 'google': // Scale 0-5 (averageRating)
+            return Math.round(rating * 4); // Multiply by 4
+        case 'igdb': // Scale 0-100 (total_rating)
+            return Math.round(rating / 5); // Divide by 5
+        default:
+            return null;
+    }
+}
 ```
 
 ### libraryRoutes.js
 
 ```js
+// routes/api/libraryRoutes.js
 const express = require('express');
-const db = require('../../database');
-const { verifyToken } = require('../../auth'); // Import the authentication middleware
+const db = require('../../dbUtils'); // Use promisified utils
+const { verifyToken } = require('../../auth');
 
 const router = express.Router();
 
-// Apply authentication middleware to all library routes
+// Apply auth middleware to all library routes
 router.use(verifyToken);
 
-// Helper function to map request status to db status based on type
-function getDbStatus(requestStatus, mediaType) {
-    switch (mediaType) {
-        case 'movie':
-        case 'series':
-            return requestStatus === 'to watch' ? 'to watch' :
-                   requestStatus === 'watching' ? 'watching' :
-                   requestStatus === 'watched' ? 'watched' : null;
-        case 'book':
-            return requestStatus === 'to read' ? 'to read' :
-                   requestStatus === 'reading' ? 'reading' :
-                   requestStatus === 'read' ? 'read' : null;
-        case 'video game':
-             return requestStatus === 'to play' ? 'to play' :
-                   requestStatus === 'playing' ? 'playing' :
-                   requestStatus === 'played' ? 'played' : null;
-        default:
-            return null; // Invalid media type
-    }
+// --- Helpers ---
+const VALID_MEDIA_TYPES = ['movie', 'series', 'book', 'video game'];
+const STATUS_MAP = {
+    'movie': ['to watch', 'watching', 'watched'],
+    'series': ['to watch', 'watching', 'watched'],
+    'book': ['to read', 'reading', 'read'],
+    'video game': ['to play', 'playing', 'played'],
+};
+const COMPLETED_STATUSES = ['watched', 'read', 'played'];
+
+function isValidStatusForType(status, mediaType) {
+    return STATUS_MAP[mediaType]?.includes(status.toLowerCase());
 }
 
-// Helper function to determine valid statuses for a media type
-function getValidStatuses(mediaType) {
-    switch (mediaType) {
-        case 'movie':
-        case 'series': return ['to watch', 'watching', 'watched'];
-        case 'book': return ['to read', 'reading', 'read'];
-        case 'video game': return ['to play', 'playing', 'played'];
-        default: return [];
-    }
+function getValidStatusesForType(mediaType) {
+    return STATUS_MAP[mediaType] || [];
 }
 
-
-// --- Get All Library Items (with optional filtering) ---
-router.get('/', (req, res) => {
-    const userId = req.userId; // Get user ID from the token verification middleware
+// --- Get Library Items (with filtering) ---
+router.get('/', async (req, res) => {
+    const userId = req.userId;
     const { mediaType, userStatus, minRating, maxRating } = req.query;
 
     let sql = `SELECT * FROM library_items WHERE userId = ?`;
     const params = [userId];
 
-    if (mediaType) {
-        sql += ` AND mediaType = ?`;
-        params.push(mediaType);
-    }
-    if (userStatus) {
-        sql += ` AND userStatus = ?`;
-        params.push(userStatus);
-    }
-    if (minRating) {
-        const minR = parseInt(minRating, 10);
-        if (!isNaN(minR) && minR >= 1 && minR <= 20) {
+    try {
+        if (mediaType) {
+            if (!VALID_MEDIA_TYPES.includes(mediaType)) {
+                return res.status(400).json({ message: 'Invalid mediaType specified.' });
+            }
+            sql += ` AND mediaType = ?`;
+            params.push(mediaType);
+        }
+        if (userStatus) {
+            // Basic check - more robust validation could check against mediatype if needed
+             sql += ` AND userStatus = ?`;
+             params.push(userStatus.toLowerCase());
+        }
+        if (minRating) {
+            const minR = parseInt(minRating, 10);
+            if (isNaN(minR) || minR < 1 || minR > 20) {
+                return res.status(400).json({ message: 'Invalid minRating. Must be between 1 and 20.' });
+            }
             sql += ` AND userRating >= ?`;
             params.push(minR);
-        } else {
-             return res.status(400).json({ message: 'Invalid minRating. Must be between 1 and 20.' });
         }
-    }
-     if (maxRating) {
-        const maxR = parseInt(maxRating, 10);
-         if (!isNaN(maxR) && maxR >= 1 && maxR <= 20) {
+         if (maxRating) {
+            const maxR = parseInt(maxRating, 10);
+             if (isNaN(maxR) || maxR < 1 || maxR > 20) {
+                return res.status(400).json({ message: 'Invalid maxRating. Must be between 1 and 20.' });
+            }
             sql += ` AND userRating <= ?`;
             params.push(maxR);
-        } else {
-            return res.status(400).json({ message: 'Invalid maxRating. Must be between 1 and 20.' });
         }
-    }
-     // Ensure minRating <= maxRating if both are provided
-    if (minRating && maxRating && parseInt(minRating) > parseInt(maxRating)) {
-        return res.status(400).json({ message: 'minRating cannot be greater than maxRating.' });
-    }
-
-    sql += ` ORDER BY addedAt DESC`; // Default sort order
-
-    db.all(sql, params, (err, rows) => {
-        if (err) {
-            console.error("Database error getting library items:", err.message);
-            return res.status(500).json({ message: 'Failed to retrieve library items.' });
+        // Check min <= max
+        if (minRating && maxRating && parseInt(minRating) > parseInt(maxRating)) {
+            return res.status(400).json({ message: 'minRating cannot be greater than maxRating.' });
         }
-        res.status(200).json(rows);
-    });
+
+        sql += ` ORDER BY addedAt DESC`;
+
+        const items = await db.all(sql, params);
+        res.status(200).json(items);
+
+    } catch (error) {
+        console.error("Get Library Error:", error);
+        res.status(500).json({ message: error.message || 'Failed to retrieve library items.' });
+    }
 });
 
-// --- Add a Media Item to the Library (Async/Await Version) ---
-router.post('/', async (req, res) => { // <<< Make handler async
+// --- Add Item ---
+router.post('/', async (req, res) => {
     const userId = req.userId;
     const {
         mediaType, mediaId, title, imageUrl, apiDescription,
-        userDescription, userRating, userStatus: requestStatus
+        userDescription, userRating, userStatus
      } = req.body;
 
-    try { // <<< Wrap in try...catch
-        // === Validation ===
-        if (!mediaType || !mediaId || !requestStatus || !title) {
-            return res.status(400).json({ message: 'mediaType, mediaId, title, and userStatus are required.' });
+    // Validation
+    if (!mediaType || !mediaId || !title || !userStatus) {
+        return res.status(400).json({ message: 'mediaType, mediaId, title, and userStatus are required.' });
+    }
+    if (!VALID_MEDIA_TYPES.includes(mediaType)) {
+         return res.status(400).json({ message: `Invalid mediaType.` });
+    }
+    if (!isValidStatusForType(userStatus, mediaType)) {
+        const valid = getValidStatusesForType(mediaType);
+        return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${valid.join(', ')}.` });
+    }
+    let ratingValue = null;
+    if (userRating !== undefined && userRating !== null && userRating !== '') {
+        ratingValue = parseInt(userRating, 10);
+        if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
+            return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20.' });
         }
-        const validMediaTypes = ['movie', 'series', 'book', 'video game'];
-        if (!validMediaTypes.includes(mediaType)) {
-             return res.status(400).json({ message: `Invalid mediaType.` });
+    }
+
+    const watchedAt = COMPLETED_STATUSES.includes(userStatus.toLowerCase()) ? new Date().toISOString() : null;
+
+    const insertSql = `
+        INSERT INTO library_items
+            (userId, mediaType, mediaId, title, imageUrl, apiDescription,
+             userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `;
+    const params = [
+        userId, mediaType, mediaId, title, imageUrl || null, apiDescription || null,
+        userDescription || null, ratingValue, userStatus.toLowerCase(), watchedAt
+    ];
+
+    try {
+        const result = await db.run(insertSql, params);
+        // Fetch and return the newly added item
+        const newItem = await db.get(`SELECT * FROM library_items WHERE id = ?`, [result.lastID]);
+        res.status(201).json(newItem);
+
+    } catch (error) {
+        console.error("Add Library Item Error:", error);
+        // Handle UNIQUE constraint error from dbUtils
+        if (error.message.includes('UNIQUE constraint failed')) {
+             return res.status(409).json({ message: 'This item is already in your library.' });
         }
-        const userStatus = getDbStatus(requestStatus, mediaType);
-        if (!userStatus) {
-            const validStatuses = getValidStatuses(mediaType);
-            return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${validStatuses.join(', ')}.` });
-        }
-        let ratingValue = null;
-        if (userRating !== undefined && userRating !== null) {
-            ratingValue = parseInt(userRating, 10);
-            if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-                return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20.' });
-            }
-        }
-
-        // === Check if item already exists (Promisified) ===
-        const existingItem = await new Promise((resolve, reject) => {
-            const checkSql = `SELECT id FROM library_items WHERE userId = ? AND mediaType = ? AND mediaId = ?`;
-            db.get(checkSql, [userId, mediaType, mediaId], (err, row) => {
-                 if (err) {
-                    console.error("Database error checking for existing library item:", err.message);
-                    return reject(new Error('Error checking library.')); // Reject promise
-                 }
-                 resolve(row); // Resolve with row or undefined
-            });
-        });
-
-        if (existingItem) {
-            return res.status(409).json({ message: 'This item is already in your library.' });
-        }
-
-        // === Prepare for Insert ===
-        // userStatus is available here directly
-        const watchedAt = ['watched', 'read', 'played'].includes(userStatus) ? new Date().toISOString() : null;
-
-        const insertSql = `
-            INSERT INTO library_items
-                (userId, mediaType, mediaId, title, imageUrl, apiDescription,
-                 userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-        `;
-        const params = [
-            userId, mediaType, mediaId, title, imageUrl || null, apiDescription || null,
-            userDescription || null, ratingValue, userStatus, watchedAt
-        ];
-
-        // === Insert the new item (Promisified) ===
-        const newItemIdResult = await new Promise((resolve, reject) => {
-            db.run(insertSql, params, function(err) {
-                 if (err) {
-                     console.error("Database error adding library item:", err.message);
-                     // Handle potential UNIQUE constraint error specifically
-                     if (err.message.includes('UNIQUE constraint failed')) {
-                         return reject(new Error('This item seems to already be in your library (Unique constraint).'));
-                     }
-                     return reject(new Error('Failed to add item to library.')); // Reject promise
-                 }
-                 resolve({ id: this.lastID }); // Resolve with new ID
-            });
-        });
-
-        // === Fetch and Return Newly Added Item (Promisified) ===
-        const newItem = await new Promise((resolve, reject) => {
-             db.get(`SELECT * FROM library_items WHERE id = ?`, [newItemIdResult.id], (err, item) => {
-                 if (err) {
-                    console.error("Database error fetching newly added library item:", err.message);
-                    // Even if fetch fails, the item WAS added, maybe return partial success?
-                    // Or reject to indicate something went wrong after insert. Let's reject.
-                    return reject(new Error('Item added, but failed to fetch details.'));
-                 }
-                 resolve(item); // Resolve with the full new item
-             });
-        });
-
-        res.status(201).json(newItem); // Send the complete new item back
-
-    } catch (error) { // Catch errors from promises or validation
-        console.error("Error during add library item:", error);
-        // Determine status code based on error message?
-        const statusCode = error.message.includes('already in your library') ? 409 : 500;
-        res.status(statusCode).json({ message: error.message || 'Server error while adding item.' });
+        res.status(500).json({ message: error.message || 'Failed to add item to library.' });
     }
 });
 
-
-// --- Edit a Library Item ---
-router.put('/:id', (req, res) => {
+// --- Edit Item ---
+router.put('/:id', async (req, res) => {
     const userId = req.userId;
     const itemId = req.params.id;
-    const { userDescription, userRating, userStatus: requestStatus } = req.body;
+    const { userDescription, userRating, userStatus } = req.body;
 
-    // Check if at least one field is being updated
-    if (userDescription === undefined && userRating === undefined && requestStatus === undefined) {
+    if (userDescription === undefined && userRating === undefined && userStatus === undefined) {
         return res.status(400).json({ message: 'No fields provided for update.' });
     }
 
-    // Fetch the existing item to validate status based on its mediaType
-    const getSql = `SELECT mediaType, userStatus as currentStatus FROM library_items WHERE id = ? AND userId = ?`;
-    db.get(getSql, [itemId, userId], (err, item) => {
-        if (err) {
-            console.error("Database error fetching item for update:", err.message);
-            return res.status(500).json({ message: 'Error finding library item.' });
-        }
+    try {
+        // Fetch the item first to get its type and current status
+        const item = await db.get(`SELECT mediaType, userStatus as currentStatus FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
         if (!item) {
-            return res.status(404).json({ message: 'Library item not found or you do not have permission to edit it.' });
+            return res.status(404).json({ message: 'Library item not found or not owned by user.' });
         }
 
         const { mediaType, currentStatus } = item;
         const updates = [];
         const params = [];
-        let newDbStatus = null; // Will hold the validated status if provided
+        let newDbStatus = null;
 
-         // Validate and prepare status update
-        if (requestStatus !== undefined) {
-            newDbStatus = getDbStatus(requestStatus, mediaType);
-            if (newDbStatus === null) {
-                 const validStatuses = getValidStatuses(mediaType);
-                return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${validStatuses.join(', ')}.` });
-            }
-            updates.push(`userStatus = ?`);
-            params.push(newDbStatus);
+        // Validate and add fields to update
+        if (userStatus !== undefined) {
+            const status = userStatus.toLowerCase();
+             if (!isValidStatusForType(status, mediaType)) {
+                 const valid = getValidStatusesForType(mediaType);
+                 return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${valid.join(', ')}.` });
+             }
+             updates.push(`userStatus = ?`);
+             params.push(status);
+             newDbStatus = status; // Store for watchedAt logic
 
-            // Handle watchedAt timestamp
-             const isNowWatched = ['watched', 'read', 'played'].includes(newDbStatus);
-             const wasAlreadyWatched = ['watched', 'read', 'played'].includes(currentStatus);
-
-             if (isNowWatched && !wasAlreadyWatched) {
-                // Status changed to watched/read/played
+             // Handle watchedAt timestamp
+             const isNowCompleted = COMPLETED_STATUSES.includes(newDbStatus);
+             const wasCompleted = COMPLETED_STATUSES.includes(currentStatus);
+             if (isNowCompleted && !wasCompleted) {
                 updates.push(`watchedAt = datetime('now')`);
-             } else if (!isNowWatched && wasAlreadyWatched) {
-                 // Status changed away from watched/read/played - clear the timestamp
+             } else if (!isNowCompleted && wasCompleted) {
                  updates.push(`watchedAt = NULL`);
-             } // else: no change in watched status relevance, do nothing to watchedAt
+             }
         }
 
-        // Prepare description update
         if (userDescription !== undefined) {
             updates.push(`userDescription = ?`);
-            params.push(userDescription); // Allow null or empty string
+            params.push(userDescription); // Allow empty string or null
         }
 
-        // Prepare rating update
         if (userRating !== undefined) {
-            if (userRating === null) { // Allow setting rating to null
-                 updates.push(`userRating = ?`);
-                 params.push(null);
-            } else {
-                const ratingValue = parseInt(userRating, 10);
-                if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-                    return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20, or null.' });
-                }
-                updates.push(`userRating = ?`);
-                params.push(ratingValue);
-            }
+             let ratingValue = null;
+             // Allow setting to null or empty string means null
+             if (userRating !== null && userRating !== '') {
+                 ratingValue = parseInt(userRating, 10);
+                 if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
+                     return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20, or null/empty.' });
+                 }
+             }
+             updates.push(`userRating = ?`);
+             params.push(ratingValue);
         }
-
-        // Always update the 'updatedAt' timestamp (handled by trigger, but explicitly adding is fine too)
-        // updates.push(`updatedAt = datetime('now')`); // Trigger handles this
 
         if (updates.length === 0) {
-             return res.status(400).json({ message: 'No valid fields provided for update.' }); // Should be caught earlier, but good fallback
+            // Should not happen due to initial check, but safe fallback
+             return res.status(400).json({ message: 'No valid update fields provided.' });
         }
 
-        // Construct the final SQL query
+        // Construct and run update query (Trigger handles updatedAt)
         const updateSql = `UPDATE library_items SET ${updates.join(', ')} WHERE id = ? AND userId = ?`;
         params.push(itemId, userId);
 
-        db.run(updateSql, params, function(err) {
-            if (err) {
-                console.error("Database error updating library item:", err.message);
-                return res.status(500).json({ message: 'Failed to update library item.' });
-            }
-            if (this.changes === 0) {
-                // This case should be rare because we fetched the item first, but handle it
-                return res.status(404).json({ message: 'Library item not found or no changes made.' });
-            }
+        const result = await db.run(updateSql, params);
 
-            // Fetch the updated item to return it
-            db.get(`SELECT * FROM library_items WHERE id = ?`, [itemId], (err, updatedItem) => {
-                 if (err) {
-                    console.error("Database error fetching updated item:", err.message);
-                    return res.status(200).json({ message: 'Item updated successfully, but failed to fetch details.' });
-                 }
-                 res.status(200).json(updatedItem);
-            });
-        });
-    });
+        if (result.changes === 0) {
+            // Should be rare given the initial fetch, maybe concurrent modification?
+            return res.status(404).json({ message: 'Item not found or no changes applied.' });
+        }
+
+        // Fetch and return the updated item
+        const updatedItem = await db.get(`SELECT * FROM library_items WHERE id = ?`, [itemId]);
+        res.status(200).json(updatedItem);
+
+    } catch (error) {
+        console.error("Update Library Item Error:", error);
+        res.status(500).json({ message: error.message || 'Failed to update library item.' });
+    }
 });
 
-
-// --- Delete a Library Item ---
-router.delete('/:id', (req, res) => {
+// --- Delete Item ---
+router.delete('/:id', async (req, res) => {
     const userId = req.userId;
     const itemId = req.params.id;
 
-    const sql = `DELETE FROM library_items WHERE id = ? AND userId = ?`;
-    db.run(sql, [itemId, userId], function(err) {
-        if (err) {
-            console.error("Database error deleting library item:", err.message);
-            return res.status(500).json({ message: 'Failed to delete library item.' });
+    try {
+        const result = await db.run(`DELETE FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
+
+        if (result.changes === 0) {
+            return res.status(404).json({ message: 'Library item not found or not owned by user.' });
         }
-        if (this.changes === 0) {
-            // Item didn't exist or didn't belong to the user
-            return res.status(404).json({ message: 'Library item not found or you do not have permission to delete it.' });
-        }
+        // Prefer 200 with message or 204 No Content
         res.status(200).json({ message: 'Library item deleted successfully.' });
-        // Alternatively, use status 204 No Content (often preferred for DELETE)
         // res.status(204).send();
-    });
+
+    } catch (error) {
+        console.error("Delete Library Item Error:", error);
+        res.status(500).json({ message: error.message || 'Failed to delete library item.' });
+    }
 });
 
 module.exports = router;
@@ -2746,236 +3149,197 @@ module.exports = router;
 ### searchRoutes.js
 
 ```js
+// routes/api/searchRoutes.js
 const express = require('express');
 const axios = require('axios');
 require('dotenv').config();
+const { getIgdbHeaders } = require('./igdbAuthHelper');
 
 const router = express.Router();
 
+// --- Environment Variable Checks ---
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
 const IGDB_CLIENT_ID = process.env.IGDB_CLIENT_ID;
-const IGDB_CLIENT_SECRET = process.env.IGDB_CLIENT_SECRET; // Use Secret now
+const IGDB_CLIENT_SECRET = process.env.IGDB_CLIENT_SECRET;
 
+// Log missing keys during startup for easier debugging
+if (!TMDB_API_KEY) console.warn("TMDB_API_KEY is missing from .env. Movie/Series search will fail.");
+if (!IGDB_CLIENT_ID || !IGDB_CLIENT_SECRET) console.warn("IGDB_CLIENT_ID or IGDB_CLIENT_SECRET is missing from .env. Video Game search will fail.");
+// GOOGLE_BOOKS_API_KEY is often optional, so no warning needed.
+
+// --- API Base URLs ---
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const GOOGLE_BOOKS_BASE_URL = 'https://www.googleapis.com/books/v1/volumes';
 const IGDB_BASE_URL = 'https://api.igdb.com/v4';
-const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/token';
 
-// --- IGDB Token Caching ---
-let igdbTokenCache = {
-    accessToken: null,
-    expiresAt: 0 // Timestamp when the token expires
-};
+// --- Unified Rating Conversion Helper ---
+/**
+ * Converts API rating to a consistent 1-20 scale.
+ * Handles different source scales (e.g., TMDB 0-10, Google 0-5, IGDB 0-100).
+ * @param {number|null|undefined} apiRating The rating from the API.
+ * @param {'tmdb'|'google'|'igdb'} source The API source.
+ * @returns {number|null} Rating on a 1-20 scale, or null if input is invalid/missing.
+ */
+function convertRatingTo20(apiRating, source) {
+    const rating = parseFloat(apiRating);
+    if (isNaN(rating)) return null;
 
-// --- Function to get a valid IGDB Access Token (fetches if needed) ---
-async function getIgdbAccessToken() {
-    const now = Date.now();
-    // Check if token exists and is not expired (add a small buffer, e.g., 60 seconds)
-    if (igdbTokenCache.accessToken && igdbTokenCache.expiresAt > now + 60000) {
-        console.log("Using cached IGDB token.");
-        return igdbTokenCache.accessToken;
-    }
-
-    // Token is invalid or expired, fetch a new one
-    console.log("Fetching new IGDB token...");
-    if (!IGDB_CLIENT_ID || !IGDB_CLIENT_SECRET) {
-        throw new Error('IGDB Client ID or Client Secret missing in .env');
-    }
-
-    try {
-        const params = new URLSearchParams();
-        params.append('client_id', IGDB_CLIENT_ID);
-        params.append('client_secret', IGDB_CLIENT_SECRET);
-        params.append('grant_type', 'client_credentials');
-
-        const response = await axios.post(TWITCH_AUTH_URL, params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
-        });
-
-        const { access_token, expires_in } = response.data;
-
-        if (!access_token) {
-             throw new Error('Failed to retrieve access token from Twitch.');
-        }
-
-        // Store the new token and calculate expiry time
-        igdbTokenCache.accessToken = access_token;
-        // expires_in is in seconds, convert to milliseconds
-        igdbTokenCache.expiresAt = now + (expires_in * 1000);
-
-        console.log("Successfully fetched and cached new IGDB token.");
-        return access_token;
-
-    } catch (error) {
-        console.error("Error fetching IGDB token from Twitch:", error.response ? error.response.data : error.message);
-        // Clear cache on failure
-        igdbTokenCache.accessToken = null;
-        igdbTokenCache.expiresAt = 0;
-        // Rethrow a more specific error
-        throw new Error(`Twitch OAuth failed: ${error.response?.data?.message || error.message}`);
-    }
-}
-
-// --- Helper to get required IGDB Headers ---
-async function getIgdbHeaders() {
-    try {
-        const accessToken = await getIgdbAccessToken(); // Get valid token (cached or new)
-        return {
-            'Client-ID': IGDB_CLIENT_ID,
-            'Authorization': `Bearer ${accessToken}`, // Correct format
-            'Accept': 'application/json',
-            // 'Content-Type': 'text/plain' // Often needed for IGDB APOCALYPSEO body
-        };
-    } catch (error) {
-         console.error("Failed to get IGDB headers:", error.message);
-         // Propagate the error so the main route handler knows authentication failed
-         throw new Error(`IGDB Authentication setup failed: ${error.message}`);
+    switch (source) {
+        case 'tmdb': // Scale 0-10
+            return Math.round(rating * 2); // Simple multiply by 2
+        case 'google': // Scale 0-5 (averageRating)
+            return Math.round(rating * 4); // Multiply by 4
+        case 'igdb': // Scale 0-100 (total_rating)
+            return Math.round(rating / 5); // Divide by 5
+        default:
+            return null;
     }
 }
 
 
-// --- Search Media ---
+// --- Main Search Route ---
+// GET /api/search?query=...&type=...
 router.get('/', async (req, res) => {
     const { query, type } = req.query;
+    const mediaType = type?.toLowerCase(); // Normalize type
 
-    if (!query) {
-        return res.status(400).json({ message: 'Search query is required.' });
+    // --- Basic Input Validation ---
+    if (!query || typeof query !== 'string' || query.trim() === '') {
+        return res.status(400).json({ message: 'Search query parameter is required.' });
+    }
+    const validTypes = ['movie', 'series', 'book', 'video game', 'videogame']; // Allow 'videogame' alias
+    if (!mediaType || !validTypes.includes(mediaType)) {
+        return res.status(400).json({ message: 'Invalid or missing media type parameter. Use movie, series, book, or video game.' });
     }
 
-    try {
-        let results = [];
-        const encodedQuery = encodeURIComponent(query);
+    console.log(`Searching for ${mediaType} with query: "${query}"`);
+    const encodedQuery = encodeURIComponent(query.trim());
+    let results = [];
 
-        switch (type) {
-            // --- Movie Case ---
+    try {
+        // --- API Call Dispatch ---
+        switch (mediaType) {
+            // --- Movie ---
             case 'movie':
-                if (!TMDB_API_KEY) return res.status(500).json({ message: 'TMDB API Key not configured.' });
-                const movieUrl = `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodedQuery}`;
+                if (!TMDB_API_KEY) throw new Error('TMDB API Key not configured.');
+                const movieUrl = `${TMDB_BASE_URL}/search/movie?api_key=${TMDB_API_KEY}&query=${encodedQuery}&include_adult=false`;
                 const movieResponse = await axios.get(movieUrl);
                 results = movieResponse.data.results.map(item => ({
-                    id: item.id.toString(),
-                    type: 'movie',
+                    mediaId: item.id.toString(), // Use consistent 'mediaId'
+                    mediaType: 'movie',
                     title: item.title,
                     description: item.overview,
                     imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-                    releaseDate: item.release_date,
-                    rating: item.vote_average ? (item.vote_average / 10 * 20).toFixed(1) : null,
+                    releaseDate: item.release_date || null, // Ensure null if empty
+                    rating: convertRatingTo20(item.vote_average, 'tmdb'),
                     apiSource: 'tmdb'
                 }));
                 break;
 
-            // --- Series Case ---
+            // --- Series ---
             case 'series':
-                 if (!TMDB_API_KEY) return res.status(500).json({ message: 'TMDB API Key not configured.' });
-                const seriesUrl = `${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&query=${encodedQuery}`;
+                 if (!TMDB_API_KEY) throw new Error('TMDB API Key not configured.');
+                const seriesUrl = `${TMDB_BASE_URL}/search/tv?api_key=${TMDB_API_KEY}&query=${encodedQuery}&include_adult=false`;
                 const seriesResponse = await axios.get(seriesUrl);
                  results = seriesResponse.data.results.map(item => ({
-                    id: item.id.toString(),
-                    type: 'series',
-                    title: item.name,
+                    mediaId: item.id.toString(),
+                    mediaType: 'series',
+                    title: item.name, // TV uses 'name'
                     description: item.overview,
                     imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null,
-                    releaseDate: item.first_air_date,
-                    rating: item.vote_average ? (item.vote_average / 10 * 20).toFixed(1) : null,
+                    releaseDate: item.first_air_date || null,
+                    rating: convertRatingTo20(item.vote_average, 'tmdb'),
                     apiSource: 'tmdb'
                 }));
                 break;
 
-            // --- Book Case ---
+            // --- Book ---
             case 'book':
-                const booksUrl = `${GOOGLE_BOOKS_BASE_URL}?q=${encodedQuery}${GOOGLE_BOOKS_API_KEY ? '&key=' + GOOGLE_BOOKS_API_KEY : ''}`;
+                // Google Books API Key is optional but recommended
+                const booksUrl = `${GOOGLE_BOOKS_BASE_URL}?q=${encodedQuery}&maxResults=20${GOOGLE_BOOKS_API_KEY ? '&key=' + GOOGLE_BOOKS_API_KEY : ''}`;
                 const booksResponse = await axios.get(booksUrl);
+                // Ensure items array exists before mapping
                 results = (booksResponse.data.items || []).map(item => ({
-                    id: item.id,
-                    type: 'book',
-                    title: item.volumeInfo?.title,
-                    authors: item.volumeInfo?.authors,
+                    mediaId: item.id, // Google Books ID is usually a string
+                    mediaType: 'book',
+                    title: item.volumeInfo?.title || 'Unknown Title',
+                    authors: item.volumeInfo?.authors || [], // Ensure array
                     description: item.volumeInfo?.description,
-                    imageUrl: item.volumeInfo?.imageLinks?.thumbnail,
-                    publishedDate: item.volumeInfo?.publishedDate,
-                    rating: item.volumeInfo?.averageRating ? (item.volumeInfo.averageRating / 5 * 20).toFixed(1) : null,
+                    // Prefer HTTPS for images if available
+                    imageUrl: item.volumeInfo?.imageLinks?.thumbnail?.replace(/^http:/, 'https') || item.volumeInfo?.imageLinks?.smallThumbnail?.replace(/^http:/, 'https') || null,
+                    publishedDate: item.volumeInfo?.publishedDate || null,
+                    rating: convertRatingTo20(item.volumeInfo?.averageRating, 'google'),
                     apiSource: 'google_books'
                 }));
                 break;
 
-            // --- Video Game Case ---
+            // --- Video Game ---
             case 'video game':
-            case 'videogame':
-                let igdbHeaders;
-                try {
-                    // Get headers, which internally handles token fetching/caching
-                    igdbHeaders = await getIgdbHeaders();
-                } catch(authError) {
-                     // Catch errors specifically from getIgdbHeaders/getIgdbAccessToken
-                     console.error("IGDB Auth Error during header retrieval:", authError.message);
-                     return res.status(503).json({ message: `Could not authenticate with IGDB service: ${authError.message}` }); // 503 Service Unavailable might be appropriate
-                }
+            case 'videogame': // Handle alias
+                // Get headers (handles token fetching/caching internally, will throw on auth error)
+                const igdbHeaders = await getIgdbHeaders();
 
-                // Ensure headers were obtained (shouldn't fail if error handling above is correct, but good check)
-                if (!igdbHeaders) {
-                     return res.status(500).json({ message: 'Failed to obtain necessary IGDB authentication headers.' });
-                }
+                // Construct the IGDB API Query Language (APOCALYPSEO) body
+                // Escape double quotes in the search query itself
+                const escapedQuery = query.trim().replace(/"/g, '\\"');
+                const igdbBody = `search "${escapedQuery}"; fields name, summary, cover.url, first_release_date, total_rating, genres.name, platforms.abbreviation; limit 20; where category = 0 | category = 8 | category = 9;`;
 
 
-                const igdbBody = `
-                    search "${query.replace(/"/g, '\\"')}";
-                    fields name, summary, cover.url, first_release_date, total_rating, genres.name, platforms.abbreviation;
-                    limit 20;
-                `;
-
-                // Make the actual IGDB API request
+                // Make the POST request to IGDB
                 const gameResponse = await axios.post(`${IGDB_BASE_URL}/games`, igdbBody, {
-                    headers: { ...igdbHeaders, 'Content-Type': 'text/plain' } // Send body as plain text
+                    headers: { ...igdbHeaders, 'Content-Type': 'text/plain' }
                  });
 
-                // Format IGDB results
                 results = gameResponse.data.map(item => ({
-                    id: item.id.toString(),
-                    type: 'video game',
-                    title: item.name,
+                    mediaId: item.id.toString(),
+                    mediaType: 'video game',
+                    title: item.name || 'Unknown Title',
                     description: item.summary,
-                    // Use https for image URLs and get bigger cover
                     imageUrl: item.cover?.url ? item.cover.url.replace(/^\/\//, 'https://').replace('/t_thumb/', '/t_cover_big/') : null,
                     releaseDate: item.first_release_date ? new Date(item.first_release_date * 1000).toISOString().split('T')[0] : null,
-                    rating: item.total_rating ? (item.total_rating / 100 * 20).toFixed(1) : null,
-                    genres: item.genres?.map(g => g.name),
-                    platforms: item.platforms?.map(p => p.abbreviation),
+                    rating: convertRatingTo20(item.total_rating, 'igdb'), // Use helper
+                    genres: item.genres?.map(g => g.name) || [],
+                    platforms: item.platforms?.map(p => p.abbreviation).filter(p => p) || [],
                     apiSource: 'igdb'
                 }));
                 break;
 
-            // --- Default Case ---
-            default:
-                return res.status(400).json({ message: 'Invalid or missing media type specified. Use movie, series, book, or video game.' });
+            // Default case handled by initial validation
         }
 
+        // --- Send Results ---
         res.status(200).json(results);
 
     } catch (error) {
-        // Catch errors from API calls (TMDB, Google Books, IGDB game search itself)
-        console.error(`Error searching ${type || 'media'} for query "${query}":`, error.response ? JSON.stringify(error.response.data, null, 2) : error.message);
+        // --- Comprehensive Error Handling ---
+        console.error(`Error searching ${mediaType || 'media'} for query "${query}":`, error);
 
-        // Check if it's an Axios error with a response
-         if (axios.isAxiosError(error) && error.response) {
-            // Provide a more specific error based on external API status if possible
-            const status = error.response.status;
-            let message = `Failed to fetch search results from external API (${status}).`;
-             // You could add specific handling for common statuses like 401, 404, 429 from the external APIs
-            if (status === 401) message = 'External API authentication failed (check API key validity or token permissions).';
-            if (status === 429) message = 'External API rate limit exceeded. Please try again later.';
-
-            return res.status(status >= 500 ? 502 : status) // Use 502 Bad Gateway for upstream server errors
-                      .json({ message: message, details: error.response.data?.message || 'No details provided.' });
-        } else if (error.message.includes('IGDB Authentication setup failed') || error.message.includes('Twitch OAuth failed')) {
-            // Handle errors specifically thrown from our auth functions if not caught earlier
-             return res.status(503).json({ message: error.message });
-        } else {
-            // General server error for other unexpected issues
-            return res.status(500).json({ message: `Server error during search: ${error.message}` });
+        // Check if it's an error thrown by our own setup (e.g., missing API key, IGDB auth)
+        if (error.message.includes('API Key not configured') || error.message.includes('IGDB service')) {
+            // These are configuration/setup issues, likely 500 or 503
+            return res.status(503).json({ message: error.message }); // 503 Service Unavailable
         }
+
+        // Check if it's an Axios error from the external API call
+        if (axios.isAxiosError(error)) {
+            const status = error.response?.status || 500; // Default to 500 if no response status
+            let message = `Failed to fetch search results from external API (${error.config?.url}).`;
+            const details = error.response?.data?.message || error.response?.data?.status_message || error.message;
+
+            // Customize messages for common external API errors
+            if (status === 401) message = 'External API authentication failed. Check API key validity or permissions.';
+            else if (status === 404) message = 'External API endpoint not found or resource does not exist.';
+            else if (status === 429) message = 'External API rate limit exceeded. Please try again later.';
+            else if (status >= 500) message = 'External API service is unavailable or encountered an error.';
+
+            // Return appropriate status code (502 for upstream errors)
+            return res.status(status === 401 || status === 404 || status === 429 ? status : 502)
+                      .json({ message: message, details: details });
+        }
+
+        // General server error for anything else unexpected
+        return res.status(500).json({ message: `An unexpected server error occurred during search: ${error.message}` });
     }
 });
 
@@ -2990,6 +3354,29 @@ module.exports = router;
     <p>This application helps you manage the media you want to consume.</p>
     <p>Built with Node.js, Express, SQLite, and Handlebars.</p>
     <p>Search powered by TMDB, Google Books, and IGDB.</p>
+</section>
+```
+
+### error.hbs
+
+```hbs
+{{! views/error.hbs }}
+
+<section class="error-page card">
+  <h2 class="error-code">{{#if errorCode}}{{errorCode}}{{else}}Error{{/if}}</h2>
+  <p class="error-message-text">
+    {{#if errorMessage}}
+      {{errorMessage}}
+    {{else}}
+      An unexpected error occurred. Please try again later.
+    {{/if}}
+  </p>
+  <div class="error-actions">
+    <a href="/" class="btn btn-primary">Go to Homepage</a>
+    {{#if user}} {{!-- Show library link only if logged in --}}
+      <a href="/library" class="btn btn-secondary">Go to My Library</a>
+    {{/if}}
+  </div>
 </section>
 ```
 
@@ -3128,49 +3515,6 @@ module.exports = router;
 </html>
 ```
 
-### addItemModal.hbs
-
-```hbs
-{{! views/partials/addItemModal.hbs }}
-<button id="modalCloseBtn" class="modal-close-btn" aria-label="Close">×</button>
-<h2 id="modalTitle">{{modalTitle}}</h2>
-<form id="modalForm" data-mode="{{mode}}" {{#if itemId}}data-item-id="{{itemId}}"{{/if}}>
-
-    {/* Hidden fields for ADD mode (less critical if data is passed differently for edit) */}
-    {{#if isAddMode}}
-    <input type="hidden" id="modalMediaId" value="{{mediaId}}">
-    <input type="hidden" id="modalMediaType" value="{{mediaType}}">
-    <input type="hidden" id="modalTitleData" value="{{itemTitle}}">
-    <input type="hidden" id="modalImageUrlData" value="{{imageUrl}}">
-    <input type="hidden" id="modalApiDescriptionData" value="{{apiDescription}}">
-    {{/if}}
-
-    <div class="form-group">
-        <label for="modalUserStatus">Your Status:</label>
-        <select id="modalUserStatus" name="userStatus" required>
-            <option value="" disabled {{#unless currentStatus}}selected{{/unless}}>-- Select Status --</option>
-            {{#each validStatuses}}
-            <option value="{{this}}" {{#if (eq this ../currentStatus)}}selected{{/if}}>
-                {{capitalize this}}
-            </option>
-            {{/each}}
-        </select>
-    </div>
-    <div class="form-group">
-        <label for="modalUserRating">Your Rating (1-20):</label>
-        <input type="number" id="modalUserRating" name="userRating" min="1" max="20" placeholder="Optional" value="{{currentRating}}">
-    <div class="form-group">
-        <label for="modalUserDescription">Your Notes:</label>
-        <textarea id="modalUserDescription" name="userDescription" rows="3" placeholder="Optional">{{currentUserDescription}}</textarea>
-    </div>
-    <div class="modal-actions">
-        <button type="button" id="modalCancelBtn" class="btn btn-secondary">Cancel</button>
-        <button type="submit" class="btn btn-primary">{{submitButtonText}}</button>
-    </div>
-     <p id="modalError" class="modal-error-message hidden"></p>
-</form>
-```
-
 ### footer.hbs
 
 ```hbs
@@ -3202,6 +3546,56 @@ module.exports = router;
         </nav>
     </div>
 </header>
+```
+
+### itemFormModal.hbs
+
+```hbs
+{{! views/partials/itemFormModal.hbs }}
+{{! Used by client-side JS to populate the generic modal }}
+<button class="modal-close-btn" aria-label="Close">×</button>
+<h2 id="modalTitle">{{modalTitle}}</h2>
+
+<form id="itemForm">
+    {{!-- Hidden fields managed by JS --}}
+    <input type="hidden" id="formMode" value="{{mode}}">
+    <input type="hidden" id="itemId" value="{{item.id}}">
+    <input type="hidden" id="mediaId" value="{{item.mediaId}}">
+    <input type="hidden" id="mediaType" value="{{item.mediaType}}">
+    {{!-- Store core data needed if adding --}}
+    <input type="hidden" id="coreTitle" value="{{item.title}}">
+    <input type="hidden" id="coreImageUrl" value="{{item.imageUrl}}">
+    <input type="hidden" id="coreApiDescription" value="{{item.apiDescription}}">
+
+    {{#if item.imageUrl}}
+    <img src="{{item.imageUrl}}" alt="{{item.title}}" class="modal-image-preview" onerror="this.style.display='none';">
+    {{/if}}
+
+    <div class="form-group">
+        <label for="userStatus">Your Status:</label>
+        <select id="userStatus" name="userStatus" required>
+            <option value="" disabled {{#unless item.userStatus}}selected{{/unless}}>-- Select Status --</option>
+            {{#each validStatuses}}
+            <option value="{{this}}" {{#if (eq this ../item.userStatus)}}selected{{/if}}>
+                {{capitalize this}}
+            </option>
+            {{/each}}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="userRating">Your Rating (1-20):</label>
+        <input type="number" id="userRating" name="userRating" min="1" max="20" placeholder="Optional" value="{{item.userRating}}">
+    </div>
+    <div class="form-group">
+        <label for="userDescription">Your Notes:</label>
+        <textarea id="userDescription" name="userDescription" rows="3" placeholder="Optional">{{item.userDescription}}</textarea>
+    </div>
+    <div class="modal-actions">
+        <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary">{{submitButtonText}}</button>
+    </div>
+     <p class="modal-error-message hidden"></p> {{!-- For displaying form errors --}}
+</form>
 ```
 
 ### libraryControls.hbs
@@ -3258,31 +3652,34 @@ module.exports = router;
 ### mediaCard.hbs
 
 ```hbs
-{{! Template used by client-side JS for search results and library items }}
+{{! views/partials/mediaCard.hbs }}
 {{#each items}}
-<div class="{{../cardClass}}">
-    <img src="{{#if imageUrl}}{{imageUrl}}{{else}}/images/placeholder.png{{/if}}" alt="{{title}}" class="card-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+<div class="{{../cardClass}}" data-item-json="{{json this}}"> {{!-- Store item data --}}
+    <img src="{{defaultIfEmpty imageUrl '/images/placeholder.png'}}" alt="{{title}}" class="card-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
     <div class="card-content">
         <h3 class="card-title">{{title}}</h3>
         <p class="card-meta">
-            <span class="tag tag-{{mediaType}}">{{mediaType}}</span>
+            <span class="tag tag-{{classify (defaultIfEmpty mediaType type)}}">{{defaultIfEmpty mediaType type}}</span>
             {{#if releaseDate}}<span>Released: {{formatYear releaseDate}}</span>{{/if}}
-            {{#if ../isSearchResult}}
-                {{#if rating}}<span>API Rating: {{rating}}/20</span>{{/if}}
-                {{#if authors}}<span>Author(s): {{join authors ", "}}</span>{{/if}}
-            {{else}}
-                {{! Library item specific meta }}
+            {{#if publishedDate}}<span>Published: {{formatYear publishedDate}}</span>{{/if}} {{!-- For books --}}
+             {{#if authors}}<span>Author(s): {{join authors ", "}}</span>{{/if}}
+
+            {{!-- API Rating (from search or stored) --}}
+            {{#if rating}}<span>API Rating: {{rating}}/20</span>{{/if}}
+
+            {{#unless ../isSearchResult}} {{!-- Library item specific meta --}}
                  <span class="tag tag-status-{{classify userStatus}}">Status: <strong>{{userStatus}}</strong></span>
                  {{#if userRating}}<span>My Rating: {{userRating}}/20</span>{{/if}}
-                <span>Added: {{formatDate addedAt}}</span>
-                {{#if watchedAt}}<span>Completed: {{formatDate watchedAt}}</span>{{/if}}
-            {{/if}}
+                 {{#if addedAt}}<span>Added: {{formatDate addedAt}}</span>{{/if}}
+                 {{#if watchedAt}}<span>Completed: {{formatDate watchedAt}}</span>{{/if}}
+            {{/unless}}
         </p>
-        <p class="card-description">
+        <p class="card-description truncated">
             {{#if ../isSearchResult}}
-                {{truncate (defaultIfEmpty description apiDescription) 150}}
+                {{! Use description from search, fallback to apiDescription if structure differs }}
+                {{defaultIfEmpty description apiDescription}}
             {{else}}
-                <strong>My Notes:</strong> {{#if userDescription}}{{userDescription}}{{else}}None{{/if}}
+                <strong>My Notes:</strong> {{defaultIfEmpty userDescription "None"}}
             {{/if}}
         </p>
         {{#unless ../isSearchResult}}
@@ -3293,23 +3690,22 @@ module.exports = router;
 
         <div class="card-actions">
             {{#if ../isSearchResult}}
-                <button class="btn btn-primary btn-small add-to-library-btn"
-                        data-media-id="{{id}}"
-                        data-media-type="{{mediaType}}"
-                        data-title="{{title}}"
-                        data-image-url="{{imageUrl}}"
-                        {{!-- Use 'description' from search result for consistency if available --}}
-                        data-api-description="{{defaultIfEmpty description apiDescription}}"
-                        >Add to Library</button>
+                 {{!-- Add button triggers modal via event delegation --}}
+                <button class="btn btn-primary btn-small action-add">Add to Library</button>
             {{else}}
-                <button class="btn btn-secondary btn-small edit-library-item-btn" data-id="{{id}}">Edit</button>
-                <button class="btn btn-danger btn-small delete-library-item-btn" data-id="{{id}}">Delete</button>
+                 {{!-- Edit/Delete buttons trigger actions via event delegation --}}
+                <button class="btn btn-secondary btn-small action-edit">Edit</button>
+                <button class="btn btn-danger btn-small action-delete">Delete</button>
             {{/if}}
+             {{!-- Details button triggers modal via event delegation (even on library items) --}}
+             <button class="btn btn-secondary btn-small action-details">Details</button>
         </div>
     </div>
 </div>
 {{else}}
-    <p class="placeholder-text">{{../placeholder}}</p>
+    {{#unless ../hidePlaceholder}} {{!-- Allow hiding placeholder during loading --}}
+    <p class="placeholder-text">{{defaultIfEmpty ../placeholder "No items found."}}</p>
+    {{/unless}}
 {{/each}}
 ```
 
@@ -3317,56 +3713,114 @@ module.exports = router;
 
 ```hbs
 {{! views/partials/mediaDetailsModal.hbs }}
-<button id="modalCloseBtn" class="modal-close-btn" aria-label="Close">×</button>
+<button class="modal-close-btn" aria-label="Close">×</button>
 
 <div class="media-details-modal">
     <div class="details-header">
-        <img src="{{#if item.imageUrl}}{{item.imageUrl}}{{else}}/images/placeholder.png{{/if}}" alt="{{item.title}}" class="details-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+        <img src="{{defaultIfEmpty item.imageUrl '/images/placeholder.png'}}" alt="{{item.title}}" class="details-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
         <div class="details-header-info">
-            <h2>{{item.title}}</h2>
+            {{!-- Title and Year --}}
+            <h2>{{item.title}} {{#if item.releaseDate}}({{formatYear item.releaseDate}}){{/if}}</h2>
+
+            {{!-- Common Meta --}}
             <p class="details-meta">
-                <span class="tag tag-{{item.mediaType}}">{{item.mediaType}}</span>
-                 {{#if item.releaseDate}}<span>Released: {{formatYear item.releaseDate}}</span>{{/if}}
-                 {{#if item.authors}}<span>Author(s): {{join item.authors ", "}}</span>{{/if}}
-                 {{!-- API Rating (only if available from search/stored) --}}
-                 {{#if item.rating}}<span>API Rating: {{item.rating}}/20</span>{{/if}}
+                <span class="tag tag-{{classify item.mediaType}}">{{capitalize item.mediaType}}</span>
+                 {{#if item.genres.length}}
+                    <span>Genres: {{join item.genres ", "}}</span>
+                 {{/if}}
+                 {{#if item.rating}} {{!-- Display normalized rating --}}
+                    <span>Rating: {{item.rating}}/20</span>
+                 {{/if}}
+            </p>
+            {{!-- Type-Specific Meta Links/Info --}}
+            <p class="details-meta">
+                 {{#if item.imdbId}}
+                    <span><a href="https://www.imdb.com/title/{{item.imdbId}}/" target="_blank" rel="noopener noreferrer">IMDb</a></span>
+                 {{/if}}
+                  {{#if item.googleBooksLink}}
+                    <span><a href="{{item.googleBooksLink}}" target="_blank" rel="noopener noreferrer">Google Books</a></span>
+                 {{/if}}
+                 {{#if item.igdbLink}}
+                    <span><a href="{{item.igdbLink}}" target="_blank" rel="noopener noreferrer">IGDB</a></span>
+                 {{/if}}
+                 {{!-- Authors (Books) --}}
+                 {{#if item.authors.length}}<span>Author(s): {{join item.authors ", "}}</span>{{/if}}
+                 {{!-- Platforms (Games) --}}
+                 {{#if item.platforms.length}}<span>Platform(s): {{join item.platforms ", "}}</span>{{/if}}
             </p>
         </div>
     </div>
 
     <div class="details-body">
-        <h3>Original Description</h3>
-        <p>{{#if item.apiDescription}}{{item.apiDescription}}{{else}}No description available.{{/if}}</p>
+        <h3>Overview/Description</h3>
+        <p>{{defaultIfEmpty item.description item.overview "No description available."}}</p>
 
+        {{!-- Movie/Series Specific --}}
+        {{#if item.cast.length}}
+            <hr><h4>Cast</h4>
+            <ul class="details-list">
+                {{#each item.cast}}<li><strong>{{this.name}}</strong> as {{this.character}}</li>{{/each}}
+            </ul>
+        {{/if}}
+        {{#if item.producers.length}}
+            <h4>Producers</h4><p>{{join item.producers ", "}}</p>
+        {{/if}}
+
+        {{!-- Book Specific --}}
+        {{#eq item.mediaType 'book'}}
+            <hr>
+            {{#if item.publisher}}<h4>Publisher</h4><p>{{item.publisher}}</p>{{/if}}
+            {{#if item.pageCount}}<h4>Pages</h4><p>{{item.pageCount}}</p>{{/if}}
+        {{/eq}}
+
+        {{!-- Video Game Specific --}}
+         {{#eq item.mediaType 'video game'}}
+            <hr>
+            {{#if item.developers.length}}<h4>Developer(s)</h4><p>{{join item.developers ", "}}</p>{{/if}}
+            {{#if item.publishers.length}}<h4>Publisher(s)</h4><p>{{join item.publishers ", "}}</p>{{/if}}
+            {{#if item.screenshots.length}}
+                <h4>Screenshots</h4>
+                <div class="details-screenshots">
+                    {{#each item.screenshots}} <img src="{{this}}" alt="Screenshot" loading="lazy"> {{/each}}
+                </div>
+            {{/if}}
+             {{#if item.videos.length}}
+                <h4>Videos</h4>
+                 <ul class="details-list">
+                    {{#each item.videos}}<li><a href="{{this.youtubeLink}}" target="_blank" rel="noopener noreferrer">Watch Trailer/Video (YouTube)</a></li>{{/each}}
+                 </ul>
+            {{/if}}
+        {{/eq}}
+
+
+        {{!-- Library Info (If Applicable) --}}
         {{#if isLibraryItem}}
             <hr>
             <h3>My Library Info</h3>
             <p class="details-meta">
                 <span class="tag tag-status-{{classify item.userStatus}}">Status: <strong>{{item.userStatus}}</strong></span>
                 {{#if item.userRating}}<span>My Rating: {{item.userRating}}/20</span>{{/if}}
-                <span>Added: {{formatDate item.addedAt}}</span>
-                {{#if item.watchedAt}}<span>Completed: {{formatDate item.watchedAt}}</span>{{/if}}
+                {{#if item.addedAt}}<span>Added: {{formatDate item.addedAt}}</span>{{/if}}
+                 {{#if item.watchedAt}}<span>Completed: {{formatDate item.watchedAt}}</span>{{/if}}
             </p>
             <h4>My Notes:</h4>
-            <p>{{#if item.userDescription}}{{item.userDescription}}{{else}}No personal notes added.{{/if}}</p>
+            <p>{{defaultIfEmpty item.userDescription "No personal notes added."}}</p>
         {{/if}}
     </div>
 
-    <div class="modal-actions details-actions">
-        {{#if isLibraryItem}}
-            <button class="btn btn-secondary edit-library-item-btn" data-id="{{item.id}}">Edit</button>
-            <button class="btn btn-danger delete-library-item-btn" data-id="{{item.id}}">Delete</button>
-        {{else}}
-            <button class="btn btn-primary add-to-library-btn"
-                    data-media-id="{{item.id}}"
-                    data-media-type="{{item.mediaType}}"
-                    data-title="{{item.title}}"
-                    data-image-url="{{item.imageUrl}}"
-                    data-api-description="{{item.apiDescription}}"
-                    >Add to Library</button>
-        {{/if}}
-        <button type="button" id="modalCancelBtn" class="btn btn-secondary">Close</button>
+    {{!-- Action Buttons --}}
+    <div class="modal-actions details-actions" data-item-json="{{json item}}">
+        <div>
+            {{#if isLibraryItem}}
+                <button class="btn btn-secondary action-edit">Edit</button>
+                <button class="btn btn-danger action-delete">Delete</button>
+            {{else}}
+                <button class="btn btn-primary action-add">Add to Library</button>
+            {{/if}}
+        </div>
+         <button type="button" class="btn btn-secondary modal-cancel-btn">Close</button>
     </div>
+     <p class="modal-error-message hidden"></p>
 </div>
 ```
 

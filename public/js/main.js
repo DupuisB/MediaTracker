@@ -1,123 +1,80 @@
 // public/js/main.js
+(function () {
+    'use strict';
 
-// --- IIFE to encapsulate code ---
-(function() {
-    // --- Configuration ---
-    const API_BASE_URL = '/api'; // Relative URL
+    // --- Constants ---
+    const API_BASE_URL = '/api';
+    const TEMPLATE_BASE_URL = '/templates';
+
+    // --- DOM Elements (Cached) ---
+    const mainContent = document.querySelector('main.container'); // Event delegation target
+    const statusMessageEl = document.getElementById('statusMessage');
+    const responseAreaEl = document.getElementById('responseArea');
+    const statusSectionEl = document.getElementById('statusSection');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const searchForm = document.getElementById('searchForm');
+    const libraryControls = document.getElementById('libraryControls');
+    const resultsArea = document.getElementById('resultsArea');
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const infoModal = document.getElementById('infoModal');
+    const modalContentArea = document.getElementById('modalContentArea');
+    const deleteConfirmModal = document.getElementById('deleteConfirmModal');
 
     // --- State ---
-    let compiledTemplates = {}; // Cache for compiled Handlebars templates
+    let compiledTemplates = {}; // Cache for fetched Handlebars templates
+    let itemToDeleteId = null; // Store ID for delete confirmation
 
-    // --- DOM Elements (Cache elements present on load) ---
-    const resultsArea = document.getElementById('resultsArea');
-    const statusMessage = document.getElementById('statusMessage');
-    const responseArea = document.getElementById('responseArea');
-    const statusSection = document.getElementById('statusSection'); // To hide/show
-    const logoutBtn = document.getElementById('logoutBtn');
-
-    // Elements potentially added/removed or specific to pages
-    const getSearchForm = () => document.getElementById('searchForm');
-    const getLibraryControls = () => document.getElementById('libraryControls');
-    const getResultsArea = () => document.getElementById('resultsArea');
-    const getLoginForm = () => document.getElementById('loginForm');
-    const getRegisterForm = () => document.getElementById('registerForm');
-    const getAddItemModal = () => document.getElementById('addItemModal');
-    const getModalContentArea = () => document.getElementById('modalContentArea');
-    const getInfoModal = () => document.getElementById('infoModal');
-    const getModalOverlay = () => document.getElementById('infoModal');
-    
     // --- Handlebars Setup & Helpers ---
-    // Register helpers needed by mediaCard.hbs, addItemModal.hbs etc.
-    // These are simple examples, use a library like Moment.js/date-fns for robust date formatting
-    Handlebars.registerHelper('formatYear', function(dateString) {
-        return dateString ? new Date(dateString).getFullYear() : '';
-    });
-     Handlebars.registerHelper('formatDate', function(dateString) {
-        return dateString ? new Date(dateString).toLocaleDateString() : '';
-    });
-    Handlebars.registerHelper('join', function(arr, separator) {
-        return Array.isArray(arr) ? arr.join(separator) : '';
-    });
-    Handlebars.registerHelper('truncate', function(str, len) {
-        if (str && str.length > len) {
-            return str.substring(0, len) + '...';
-        }
-        return str;
-    });
-    Handlebars.registerHelper('classify', function(str) {
-        // Basic helper to create CSS class from status (e.g., "to watch" -> "to-watch")
-         return typeof str === 'string' ? str.replace(/\s+/g, '-').toLowerCase() : '';
-    });
-     Handlebars.registerHelper('capitalize', function(str) {
-         return typeof str === 'string' ? str.charAt(0).toUpperCase() + str.slice(1) : '';
-    });
-    // Add to Handlebars helpers registration in main.js
-    Handlebars.registerHelper('defaultIfEmpty', function(value1, value2) {
-        return value1 || value2 || '';
-    });
-    // Register a custom helper to check equality
-    Handlebars.registerHelper('eq', function(arg1, arg2) {
-        return arg1 === arg2;
-    });
-
-
-    // Function to fetch and compile a Handlebars template (with caching)
-    async function getTemplate(templateName) {
-        if (compiledTemplates[templateName]) {
-            return compiledTemplates[templateName];
-        }
-        try {
-            // Use the /templates/:templateName route we created
-            const response = await fetch(`/templates/${templateName}`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch template: ${templateName} (${response.status})`);
-            }
-            const templateString = await response.text();
-            compiledTemplates[templateName] = Handlebars.compile(templateString);
-            return compiledTemplates[templateName];
-        } catch (error) {
-            console.error(`Error getting template ${templateName}:`, error);
-            displayStatus(`Error loading template ${templateName}.`, true);
-            return null; // Indicate failure
-        }
+    // Register client-side helpers (if not relying solely on server-side for initial render)
+    // Ensure these match server-side helpers if templates are used in both places
+    if (window.Handlebars) {
+        const helpers = {
+            eq: (v1, v2) => v1 === v2,
+            json: (context) => JSON.stringify(context),
+            currentYear: () => new Date().getFullYear(),
+            capitalize: (str) => (typeof str === 'string' && str.length > 0) ? str.charAt(0).toUpperCase() + str.slice(1) : str,
+            formatYear: (dateString) => dateString ? new Date(dateString).getFullYear() : '',
+            formatDate: (dateString) => dateString ? new Date(dateString).toLocaleDateString() : '',
+            classify: (str) => typeof str === 'string' ? str.replace(/\s+/g, '-').toLowerCase() : '',
+            defaultIfEmpty: (value, defaultValue) => value || defaultValue || '',
+            join: (arr, separator) => Array.isArray(arr) ? arr.join(separator) : '',
+            truncate: (str, len) => (str && str.length > len) ? str.substring(0, len) + '...' : str,
+        };
+        Object.keys(helpers).forEach(key => Handlebars.registerHelper(key, helpers[key]));
+    } else {
+        console.warn('Handlebars runtime not found. Client-side templates may not work.');
     }
 
-    // --- Helper Functions ---
-    function displayStatus(message, isError = false, isSuccess = false) {
-        if (!statusMessage) return; // Element might not exist on all pages
-        statusMessage.textContent = `Status: ${message}`;
-        statusMessage.className = isError ? 'error' : (isSuccess ? 'success' : '');
-        statusSection?.classList.remove('hidden'); // Show status section on message
-        console.log(message);
+    // --- Utility Functions ---
+    function showStatus(message, type = 'info') { // type = 'info', 'success', 'error'
+        if (!statusMessageEl || !statusSectionEl) return;
+        statusMessageEl.textContent = message;
+        statusMessageEl.className = `status-${type}`; // Use classes for styling
+        statusSectionEl.classList.remove('hidden');
+        console.log(`Status [${type}]: ${message}`);
+        // Optional: Auto-hide after a delay?
+        // setTimeout(() => statusSectionEl.classList.add('hidden'), 5000);
     }
 
-    function displayResponse(data) {
-         if (!responseArea) return;
-        try {
-            responseArea.textContent = JSON.stringify(data, null, 2);
-        } catch (e) {
-            responseArea.textContent = String(data);
-        }
+    function showResponse(data) {
+        if (!responseAreaEl) return;
+        responseAreaEl.textContent = JSON.stringify(data, null, 2);
     }
 
-    function showSpinner(spinnerId) {
-        document.getElementById(spinnerId)?.classList.remove('hidden');
-    }
-    function hideSpinner(spinnerId) {
-        document.getElementById(spinnerId)?.classList.add('hidden');
+    function showSpinner(spinnerId, show = true) {
+        document.getElementById(spinnerId)?.classList.toggle('hidden', !show);
     }
 
-
-    // --- API Request Function (Handles Cookies Automatically) ---
-    async function makeApiRequest(endpoint, method = 'GET', body = null) {
-        displayStatus('Sending request...');
-        showSpinner(endpoint.includes('library') ? 'librarySpinner' : 'searchSpinner'); // Show relevant spinner
+    // Simplified API request function
+    async function apiRequest(endpoint, method = 'GET', body = null) {
         const url = `${API_BASE_URL}${endpoint}`;
         const options = {
-            method: method,
-            headers: {} // No Authorization header needed, cookies handled by browser
+            method,
+            headers: {
+                // Cookies are sent automatically by the browser
+            },
         };
-
         if (body) {
             options.headers['Content-Type'] = 'application/json';
             options.body = JSON.stringify(body);
@@ -125,543 +82,606 @@
 
         try {
             const response = await fetch(url, options);
-            let responseData;
+            const responseData = response.status === 204 ? {} : await response.json(); // Handle No Content
 
-            // Handle different success statuses
-             if (response.status === 204) { // No Content (e.g., DELETE)
-                responseData = { message: 'Operation successful.' }; // Create success data
-            } else if (response.ok) { // 200, 201
-                responseData = await response.json();
-            } else { // Handle HTTP errors (4xx, 5xx)
-                 responseData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` })); // Try to parse error JSON
-                 const errorMessage = responseData?.message || `Request failed with status: ${response.status}`;
-                 throw new Error(errorMessage); // Throw error to be caught below
+            if (!response.ok) {
+                 // Throw an error object with status and message
+                 const error = new Error(responseData.message || `HTTP error ${response.status}`);
+                 error.status = response.status;
+                 error.data = responseData;
+                 throw error;
             }
-
-            displayResponse(responseData);
-            displayStatus(`${method} ${endpoint} - Success!`, false, true); // Mark as success
+            showResponse(responseData); // Show successful response data
             return responseData;
-
         } catch (error) {
-            console.error('API Request Error:', error);
-            const errorMsg = error.message || 'An unknown API error occurred.';
-            displayStatus(`Error: ${errorMsg}`, true);
-            displayResponse({ error: errorMsg }); // Show error in response area
-            // Specific handling for auth errors (redirect to login)
-            if (error.message.includes('Access denied') || error.message.includes('expired') || error.message.includes('Invalid token')) {
-                 // Wait a moment for user to see message, then redirect
-                 setTimeout(() => {
-                    window.location.href = '/login'; // Redirect to login page
-                 }, 1500);
+            console.error(`API Request Error (${method} ${endpoint}):`, error);
+            const message = error.message || 'An unknown API error occurred.';
+            showStatus(message, 'error');
+            showResponse({ error: message, status: error.status, data: error.data });
+
+            // Handle critical auth errors (e.g., redirect to login)
+            if (error.status === 401) {
+                showStatus('Authentication error. Redirecting to login...', 'error');
+                setTimeout(() => { window.location.href = '/login'; }, 1500);
             }
-            return null; // Indicate failure
-        } finally {
-             hideSpinner(endpoint.includes('library') ? 'librarySpinner' : 'searchSpinner'); // Hide spinner
+            throw error; // Re-throw for calling function to handle if needed
         }
     }
 
-     // --- REFINED: renderResults to add data to card ---
-     async function renderResults(items, targetElement, templateName, cardClass, placeholderText) {
-        if (!targetElement) return;
-        targetElement.innerHTML = ''; // Clear previous
-        targetElement.classList.remove('loading');
+    // Function to fetch and compile Handlebars template
+    async function getTemplate(templateName) {
+        if (compiledTemplates[templateName]) {
+            return compiledTemplates[templateName];
+        }
+        try {
+            const response = await fetch(`${TEMPLATE_BASE_URL}/${templateName}`);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch template: ${templateName} (${response.status})`);
+            }
+            const templateString = await response.text();
+            if (!window.Handlebars) throw new Error("Handlebars runtime missing");
+            compiledTemplates[templateName] = Handlebars.compile(templateString);
+            return compiledTemplates[templateName];
+        } catch (error) {
+            console.error(`Error loading template ${templateName}:`, error);
+            showStatus(`Error loading template ${templateName}.`, 'error');
+            return null;
+        }
+    }
 
-        const template = await getTemplate(templateName); // Use mediaCard template
+    // Render items using a template
+    async function renderItems(items, targetElement, templateName, context = {}) {
+        if (!targetElement) return;
+
+        const template = await getTemplate(templateName);
         if (!template) {
             targetElement.innerHTML = `<p class="placeholder-text error">Error loading display template.</p>`;
             return;
         }
 
-        // Render items one by one to attach data easily
-        if (!items || items.length === 0) {
-             targetElement.innerHTML = `<p class="placeholder-text">${placeholderText}</p>`;
-             return;
+        const defaultContext = {
+            items: items,
+            placeholder: 'No items to display.',
+            hidePlaceholder: false
+        };
+        targetElement.innerHTML = template({ ...defaultContext, ...context });
+    }
+
+    // --- Modal Handling ---
+    function openModal(modalElement, contentHTML = '') {
+        if (!modalElement) return;
+        const contentArea = modalElement.querySelector('.modal-content-area') || modalElement.querySelector('#modalContentArea'); // Flexible content area selector
+         if (contentArea && contentHTML) {
+             contentArea.innerHTML = contentHTML;
+         }
+        modalElement.classList.remove('hidden');
+        // Focus management could be added here
+    }
+
+    function closeModal(modalElement) {
+        if (!modalElement) return;
+        modalElement.classList.add('hidden');
+         const contentArea = modalElement.querySelector('.modal-content-area') || modalElement.querySelector('#modalContentArea');
+         if (contentArea) {
+             contentArea.innerHTML = ''; // Clear content on close
+         }
+    }
+
+    // Open the Add/Edit Item Form Modal
+    async function openItemFormModal(mode = 'add', itemData = {}) {
+        const template = await getTemplate('itemFormModal');
+        if (!template || !infoModal) return;
+
+        const isAddMode = mode === 'add';
+        const context = {
+            mode: mode,
+            modalTitle: isAddMode ? `Add "${itemData.title}" to Library` : `Edit "${itemData.title}"`,
+            submitButtonText: isAddMode ? 'Add Item' : 'Save Changes',
+            item: isAddMode ? {
+                // For adding, map search result data or defaults
+                mediaId: itemData.id || itemData.mediaId, // Use id from search result
+                mediaType: itemData.type || itemData.mediaType,
+                title: itemData.title,
+                imageUrl: itemData.imageUrl,
+                apiDescription: itemData.description || itemData.apiDescription,
+                // Provide empty user fields for add form
+                id: null,
+                userStatus: '',
+                userRating: '',
+                userDescription: '',
+            } : itemData, // For editing, use the full library item data
+            validStatuses: getValidStatuses(itemData.type || itemData.mediaType),
+        };
+
+        openModal(infoModal, template(context));
+    }
+
+    // Open the Details Modal
+    async function openDetailsModal(mergedItemData, isLibraryItem) {
+        const template = await getTemplate('mediaDetailsModal');
+        if (!template || !infoModal) return;
+
+        const context = {
+            item: mergedItemData,
+            isLibraryItem: isLibraryItem
+        };
+        openModal(infoModal, template(context));
+    }
+
+    // Open Delete Confirmation Modal
+    function openDeleteConfirmModal(itemId, itemTitle) {
+        itemToDeleteId = itemId; // Store the ID
+        const messageEl = deleteConfirmModal?.querySelector('#deleteConfirmMessage');
+        if (messageEl) {
+            messageEl.textContent = `Are you sure you want to delete "${itemTitle}" from your library?`;
         }
-
-        items.forEach(item => {
-             const itemForTemplate = {
-                ...item,
-                // Ensure consistent naming
-                apiDescription: item.description || item.apiDescription || '',
-                mediaType: item.type || item.mediaType,
-             };
-
-            const html = template({ // Render single item
-                items: [itemForTemplate], // Pass as array for the #each block
-                cardClass: cardClass,
-                isSearchResult: cardClass === 'result-card'
-             });
-
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = html.trim(); // Render into temporary div
-            const cardElement = tempDiv.firstChild; // Get the rendered card element
-
-            if (cardElement) {
-                // Attach the full original item data to the card element
-                cardElement.dataset.itemData = JSON.stringify(item); // <<< Store data here
-                targetElement.appendChild(cardElement); // Add card to the results area
-            }
-        });
-
-        attachCardListeners(targetElement); // Attach listeners after all cards are added
+        openModal(deleteConfirmModal);
     }
 
-    // --- NEW: Function to attach listeners to cards ---
-    function attachCardListeners(parentElement) {
-        parentElement.querySelectorAll('.result-card, .library-card').forEach(card => {
-            // Store item data directly on the card element
-            const button = card.querySelector('.add-to-library-btn, .edit-library-item-btn'); // Find a button to get initial data string
-            if (button) {
-                // Find the corresponding item data using mediaId or id
-                const item = JSON.parse(button.closest('.result-card, .library-card').querySelector('.add-to-library-btn, .edit-library-item-btn,[data-id]')?.closest('.result-card, .library-card')?.dataset.itemData || '{}'); // Need a better way to get data back if button isn't the source
-
-                // Let's refine renderResults to add data directly to card
-            }
-
-
-            card.addEventListener('click', handleCardClick);
-            // Prevent card click if a button inside was clicked
-            card.querySelectorAll('button, a, details, summary, input, select, textarea').forEach(interactiveElement => {
-                interactiveElement.addEventListener('click', (event) => {
-                    event.stopPropagation(); // Stop click from bubbling up to the card
-                });
-            });
-        });
-    }
-   
     // --- Event Handlers ---
-    async function handleLogout(event) {
-        event.preventDefault();
-        const result = await makeApiRequest('/auth/logout', 'POST');
-        if (result) {
-            displayStatus('Logout successful. Redirecting...', false, true);
-            // Redirect to home page after logout
-            window.location.href = '/';
+
+    // Delegate clicks within the main content area
+    async function handleMainContentClick(event) {
+        const target = event.target;
+        const card = target.closest('.library-card, .result-card'); // Find parent card
+
+        // Determine the action based on the button clicked
+        const action = target.matches('.action-add') ? 'add' :
+                       target.matches('.action-edit') ? 'edit' :
+                       target.matches('.action-delete') ? 'delete' :
+                       target.matches('.action-details') ? 'details' : null;
+
+        // Exit if no card or no recognized action button was clicked
+        if (!action || !card) {
+            return;
+        }
+
+        event.stopPropagation(); // Prevent card click bubbling if a button was hit
+
+        // Retrieve the basic data stored on the card
+        const basicItemData = JSON.parse(card?.dataset.itemJson || '{}');
+        const isLibraryItem = card.classList.contains('library-card');
+
+        // --- Handle Actions ---
+        switch (action) {
+            case 'add':
+                // Add action is only relevant for search results (isLibraryItem should be false)
+                if (isLibraryItem) {
+                    console.warn("Add action clicked on a library item card. Ignoring.");
+                    return;
+                }
+                openItemFormModal('add', basicItemData);
+                break;
+
+            case 'edit':
+                // Edit action only applies to library items which MUST have a database id
+                if (!isLibraryItem || !basicItemData.id) {
+                    console.error("Edit action failed: Not a library item or missing database ID.", basicItemData);
+                    showStatus("Error: Cannot edit item, invalid data.", 'error');
+                    return;
+                }
+                openItemFormModal('edit', basicItemData);
+                break;
+
+            case 'delete':
+                // Delete action only applies to library items which MUST have a database id
+                if (!isLibraryItem || !basicItemData.id) {
+                    console.error("Delete action failed: Not a library item or missing database ID.", basicItemData);
+                    showStatus("Error: Cannot delete item, invalid data.", 'error');
+                    return;
+                }
+                openDeleteConfirmModal(basicItemData.id, basicItemData.title);
+                break;
+
+                case 'details':
+                    const mediaType = basicItemData.mediaType || basicItemData.type; // Get type
+                    const externalApiId = basicItemData.mediaId;
+    
+                    // Ensure we have the necessary ID to make the API call
+                    if (!externalApiId) {
+                        showStatus(`Cannot fetch details: Missing external media ID.`, 'error');
+                        console.error("Missing externalApiId for details:", basicItemData);
+                        await openDetailsModal(basicItemData, isLibraryItem);
+                        return;
+                    }
+    
+                    // Show loading state
+                    openModal(infoModal, '<div class="modal-loading">Loading details... <div class="spinner"></div></div>');
+    
+                    try {
+                        // Fetch detailed data using the CORRECT externalApiId
+                        // This now works for all types handled by the backend route
+                        const detailedData = await apiRequest(`/details/${mediaType}/${externalApiId}`);
+    
+                        // Merge basic data with detailed data
+                        // (The merging logic should generally work as the backend now returns consistent fields)
+                        const mergedData = {
+                            ...basicItemData,
+                            ...detailedData,
+                            // Ensure core identifiers are correct
+                            mediaType: mediaType,
+                            mediaId: externalApiId, // Store the ID used for the lookup
+                            // Use the normalized rating from the details API if available
+                            rating: detailedData.rating ?? basicItemData.rating ?? null,
+                            // Ensure description uses the one from details if available
+                            description: detailedData.description ?? basicItemData.description ?? basicItemData.apiDescription ?? null,
+    
+                            // Preserve library-specific fields if it is one
+                            ...(isLibraryItem && {
+                                id: basicItemData.id, // Keep DB ID
+                                userStatus: basicItemData.userStatus,
+                                userRating: basicItemData.userRating,
+                                userDescription: basicItemData.userDescription,
+                                addedAt: basicItemData.addedAt,
+                                watchedAt: basicItemData.watchedAt
+                            })
+                        };
+    
+                        // Open the modal with the complete data
+                        await openDetailsModal(mergedData, isLibraryItem);
+    
+                    } catch (error) {
+                         showStatus(`Failed to load details for "${basicItemData.title}". Showing basic info.`, 'error');
+                         // On error loading details, fall back to showing basic info
+                         await openDetailsModal(basicItemData, isLibraryItem);
+                    }
+                    break; // End case 'details'
         }
     }
 
+    // Delegate clicks within the main info modal
+    function handleInfoModalClick(event) {
+        const target = event.target;
+
+        // Close buttons
+        if (target.matches('.modal-close-btn') || target.matches('.modal-cancel-btn')) {
+            closeModal(infoModal);
+        }
+        // Handle actions *inside* the modal (e.g., if details modal has add/edit buttons)
+        else if (target.matches('.action-add')) {
+             const itemData = JSON.parse(target.closest('.modal-actions')?.dataset.itemJson || '{}');
+             closeModal(infoModal); // Close details
+             setTimeout(() => openItemFormModal('add', itemData), 50); // Open add form after small delay
+        }
+        else if (target.matches('.action-edit')) {
+             const itemData = JSON.parse(target.closest('.modal-actions')?.dataset.itemJson || '{}');
+             closeModal(infoModal);
+             setTimeout(() => openItemFormModal('edit', itemData), 50);
+        }
+        else if (target.matches('.action-delete')) {
+             const itemData = JSON.parse(target.closest('.modal-actions')?.dataset.itemJson || '{}');
+             closeModal(infoModal);
+             setTimeout(() => openDeleteConfirmModal(itemData.id, itemData.title), 50);
+        }
+
+        // Close on overlay click
+        else if (target === infoModal) {
+            closeModal(infoModal);
+        }
+    }
+
+    // Handle Add/Edit Form Submission (inside infoModal)
+    async function handleItemFormSubmit(event) {
+        event.preventDefault();
+        const form = event.target;
+        const modalErrorEl = form.querySelector('.modal-error-message');
+        modalErrorEl?.classList.add('hidden');
+        showSpinner('modalSpinner', true); // Assuming a spinner exists in the modal
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Get hidden core data needed for add/edit
+        const mode = form.querySelector('#formMode')?.value;
+        const itemId = form.querySelector('#itemId')?.value; // Will be empty string for 'add'
+        const mediaId = form.querySelector('#mediaId')?.value;
+        const mediaType = form.querySelector('#mediaType')?.value;
+        const title = form.querySelector('#coreTitle')?.value;
+        const imageUrl = form.querySelector('#coreImageUrl')?.value;
+        const apiDescription = form.querySelector('#coreApiDescription')?.value;
+
+        const payload = {
+            userStatus: data.userStatus,
+            userRating: data.userRating, // API handles parsing/validation
+            userDescription: data.userDescription,
+        };
+
+        try {
+            let result;
+            if (mode === 'add') {
+                // Add requires core media info + user info
+                const addPayload = {
+                    ...payload,
+                    mediaId,
+                    mediaType,
+                    title,
+                    imageUrl,
+                    apiDescription
+                };
+                result = await apiRequest('/library', 'POST', addPayload);
+                showStatus(`"${result.title}" added successfully!`, 'success');
+            } else { // mode === 'edit'
+                // Edit only sends fields to update
+                result = await apiRequest(`/library/${itemId}`, 'PUT', payload);
+                showStatus(`"${result.title}" updated successfully!`, 'success');
+            }
+            closeModal(infoModal);
+            fetchLibrary(); // Refresh library view
+        } catch (error) {
+            // Display error within the modal
+            const message = error.data?.message || error.message || 'Operation failed.';
+            if (modalErrorEl) {
+                modalErrorEl.textContent = message;
+                modalErrorEl.classList.remove('hidden');
+            } else {
+                showStatus(message, 'error'); // Fallback to main status
+            }
+        } finally {
+             showSpinner('modalSpinner', false);
+        }
+    }
+
+    // Handle Delete Confirmation
+    async function handleDeleteConfirm() {
+        if (!itemToDeleteId) return;
+        showSpinner('deleteSpinner', true); // Assuming spinner in delete modal
+
+        try {
+            await apiRequest(`/library/${itemToDeleteId}`, 'DELETE');
+            showStatus(`Item deleted successfully.`, 'success');
+            closeModal(deleteConfirmModal);
+            fetchLibrary(); // Refresh library
+        } catch (error) {
+            // Error already shown by apiRequest
+             showStatus(`Failed to delete item: ${error.message}`, 'error');
+        } finally {
+            itemToDeleteId = null; // Reset ID
+            showSpinner('deleteSpinner', false);
+        }
+    }
+
+    // Handle Library Fetching and Filtering
+    async function fetchLibrary() {
+        if (!resultsArea) return;
+        showSpinner('librarySpinner', true);
+        // Use placeholder rendering during load
+        await renderItems([], resultsArea, 'mediaCard', { hidePlaceholder: true });
+        resultsArea.classList.add('loading'); // Optional: for styling
+
+        const params = new URLSearchParams();
+        if (libraryControls) {
+            // Get values directly from filter elements by ID
+            const mediaTypeSelect = libraryControls.querySelector('#filterMediaType');
+            const statusSelect = libraryControls.querySelector('#filterStatus');
+            const minRatingInput = libraryControls.querySelector('#filterMinRating');
+            const maxRatingInput = libraryControls.querySelector('#filterMaxRating');
+
+            if (mediaTypeSelect?.value) {
+                params.append('mediaType', mediaTypeSelect.value);
+            }
+            if (statusSelect?.value) {
+                params.append('userStatus', statusSelect.value);
+            }
+            if (minRatingInput?.value) {
+                params.append('minRating', minRatingInput.value);
+            }
+            if (maxRatingInput?.value) {
+                params.append('maxRating', maxRatingInput.value);
+            }
+        }
+        const queryParams = params.toString() ? `?${params.toString()}` : ''; // Add '?' only if params exist
+
+        try {
+            const items = await apiRequest(`/library${queryParams}`, 'GET');
+            await renderItems(items, resultsArea, 'mediaCard', {
+                 isSearchResult: false,
+                 cardClass: 'library-card',
+                 placeholder: 'Library is empty or filters match no items.'
+             });
+        } catch (error) {
+            // Error already shown by apiRequest
+            await renderItems([], resultsArea, 'mediaCard', {
+                 isSearchResult: false,
+                 cardClass: 'library-card',
+                 placeholder: 'Error loading library.'
+             });
+        } finally {
+            showSpinner('librarySpinner', false);
+            resultsArea.classList.remove('loading');
+        }
+    }
+
+    // Handle Search
+    async function handleSearch(event) {
+        event.preventDefault();
+        if (!resultsArea || !searchForm) return;
+
+        const queryInput = searchForm.querySelector('#searchQuery');
+        const typeSelect = searchForm.querySelector('#searchType');
+        const query = queryInput.value.trim();
+        const type = typeSelect.value;
+
+        if (!query) {
+            showStatus('Please enter a search term.', 'error');
+            queryInput.focus();
+            return;
+        }
+
+        showSpinner('searchSpinner', true);
+        await renderItems([], resultsArea, 'mediaCard', { hidePlaceholder: true }); // Clear previous results
+        resultsArea.classList.add('loading');
+
+        try {
+            const results = await apiRequest(`/search?query=${encodeURIComponent(query)}&type=${type}`, 'GET');
+            await renderItems(results, resultsArea, 'mediaCard', {
+                 isSearchResult: true,
+                 cardClass: 'result-card',
+                 placeholder: 'No results found.'
+             });
+        } catch (error) {
+            // Error handled by apiRequest
+             await renderItems([], resultsArea, 'mediaCard', {
+                 isSearchResult: true,
+                 cardClass: 'result-card',
+                 placeholder: 'Search failed.'
+             });
+        } finally {
+            showSpinner('searchSpinner', false);
+            resultsArea.classList.remove('loading');
+        }
+    }
+
+    // Handle Login
+    async function handleLogin(event) {
+         event.preventDefault();
+         const form = event.target;
+         const username = form.username.value.trim();
+         const password = form.password.value.trim();
+         const errorEl = form.querySelector('#loginError') || form.querySelector('.form-error'); // General error element
+         errorEl?.classList.add('hidden');
+
+         if (!username || !password) {
+            if(errorEl){ errorEl.textContent = 'Username and password required.'; errorEl.classList.remove('hidden'); }
+             return;
+         }
+
+         try {
+             showSpinner('loginSpinner', true); // Assuming spinner ID
+             const result = await apiRequest('/auth/login', 'POST', { username, password });
+             if (result && result.user) {
+                 showStatus('Login successful! Redirecting...', 'success');
+                 window.location.href = '/library'; // Redirect
+             }
+             // Shouldn't reach here if successful due to redirect, but good practice
+         } catch (error) {
+             const message = error.data?.message || error.message || 'Login failed.';
+             if(errorEl){ errorEl.textContent = message; errorEl.classList.remove('hidden'); }
+         } finally {
+            showSpinner('loginSpinner', false);
+         }
+    }
+
+    // Handle Registration
     async function handleRegister(event) {
         event.preventDefault();
         const form = event.target;
         const username = form.username.value.trim();
         const password = form.password.value.trim();
-        // Get elements reliably
-        const errorEl = document.getElementById('registerError');
-        const messageEl = document.getElementById('registerMessage');
-    
-        // Hide messages initially IF elements exist
-        if(errorEl) errorEl.classList.add('hidden');
-        if(messageEl) messageEl.classList.add('hidden');
-    
-        // --- Validation ---
-        if (!username || !password) return displayStatus('Username and password required.', true);
-        if (password.length < 6) {
-            if (errorEl) { // Check if element exists before setting text
-                errorEl.textContent = 'Password must be at least 6 characters.';
-                errorEl.classList.remove('hidden');
-            } else {
-                 displayStatus('Password must be at least 6 characters.', true); // Fallback status
-            }
-            return;
-        }
-    
-        // --- API Call ---
-        const result = await makeApiRequest('/auth/register', 'POST', { username, password });
-    
-        // --- Handle Response ---
-        if (result) {
-            if (messageEl) { // Check if element exists
-                messageEl.textContent = result.message || `User ${username} registered! Please login.`;
-                messageEl.classList.remove('hidden');
-            } else {
-                displayStatus(result.message || `User ${username} registered! Please login.`, false, true); // Fallback
-            }
-            form.reset();
-        } else {
-             // Display error from status or response
-             const apiErrorMsg = statusMessage.textContent.includes('Error:')
-                               ? statusMessage.textContent.replace('Status: Error: ', '')
-                               : 'Registration failed. Please try again.';
-             if (errorEl) { // Check if element exists
-                 errorEl.textContent = apiErrorMsg;
-                 errorEl.classList.remove('hidden');
-             } else {
-                 displayStatus(apiErrorMsg, true); // Fallback
-             }
-        }
-    }
-    
-    async function handleLogin(event) {
-        event.preventDefault();
-        const form = event.target;
-        const username = form.username.value.trim();
-        const password = form.password.value.trim();
-        const errorEl = document.getElementById('loginError');
+        const errorEl = form.querySelector('#registerError') || form.querySelector('.form-error');
+        const messageEl = form.querySelector('#registerMessage') || form.querySelector('.form-message');
         errorEl?.classList.add('hidden');
+        messageEl?.classList.add('hidden');
 
-        if (!username || !password) return displayStatus('Username and password required.', true);
 
-        const result = await makeApiRequest('/auth/login', 'POST', { username, password });
-        if (result && result.user) {
-            displayStatus('Login successful! Redirecting...', false, true);
-            // Redirect to library page after successful login
-            window.location.href = '/library';
-        } else {
-            errorEl.textContent = statusMessage.textContent.replace('Status: Error: ',''); // Display API error
-            errorEl.classList.remove('hidden');
-        }
-    }
-
-    async function handleSearch(event) {
-        event.preventDefault();
-        const form = event.target;
-        const query = form.querySelector('#searchQuery').value.trim();
-        const type = form.querySelector('#searchType').value;
-        const resultsTarget = getResultsArea();
-
-        if (!query) return displayStatus('Search query required.', true);
-        if (!resultsTarget) return; // Should be on library page
-
-        resultsTarget.classList.add('loading');
-        resultsTarget.innerHTML = '<p class="placeholder-text">Searching...</p>';
-
-        const results = await makeApiRequest(`/search?query=${encodeURIComponent(query)}&type=${type}`, 'GET');
-
-        if (results !== null) {
-            renderResults(results, resultsTarget, 'mediaCard', 'result-card', 'No results found.');
-        } else {
-            renderResults([], resultsTarget, 'mediaCard', 'result-card', 'Failed to fetch search results.');
-        }
-    }
-
-    // --- NEW: Handle click on a media card (not buttons inside) ---
-    function handleCardClick(event) {
-        const card = event.currentTarget; // The card element itself
-        const itemDataString = card.dataset.itemData;
-        if (!itemDataString) {
-            console.error('Could not find item data on clicked card.');
-            return;
-        }
-        try {
-            const item = JSON.parse(itemDataString);
-            console.log('Card clicked, item data:', item);
-                // Determine if it's a library item or search result
-            const isLibrary = card.classList.contains('library-card');
-            openDetailsModal(item, isLibrary);
-        } catch (e) {
-                console.error('Failed to parse item data from card:', e);
-        }
-    }
-    
-    async function fetchLibrary() {
-        const resultsTarget = getResultsArea();
-        if (!resultsTarget) return; // Not on library page
-
-        resultsTarget.classList.add('loading');
-        resultsTarget.innerHTML = '<p class="placeholder-text">Loading library...</p>';
-
-        // Build query string from filters
-        const controls = getLibraryControls();
-        let queryParams = [];
-        if(controls){
-             const mediaType = controls.querySelector('#filterMediaType').value;
-             const status = controls.querySelector('#filterStatus').value;
-             const minRating = controls.querySelector('#filterMinRating').value;
-             const maxRating = controls.querySelector('#filterMaxRating').value;
-             if (mediaType) queryParams.push(`mediaType=${mediaType}`);
-             if (status) queryParams.push(`userStatus=${status}`);
-             if (minRating) queryParams.push(`minRating=${minRating}`);
-             if (maxRating) queryParams.push(`maxRating=${maxRating}`);
-        }
-        const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-
-        const items = await makeApiRequest(`/library${queryString}`, 'GET');
-        if (items !== null) {
-            renderResults(items, resultsTarget, 'mediaCard', 'library-card', 'Your library is empty.');
-        } else {
-             renderResults([], resultsTarget, 'mediaCard', 'library-card', 'Could not load library.');
-        }
-    }
-
-    // --- Modal Handling ---
-    async function openAddItemModal(data) {
-        const modal = getAddItemModal();
-        const contentArea = getModalContentArea();
-        if (!modal || !contentArea) return;
-
-        contentArea.innerHTML = 'Loading...'; // Placeholder while template loads
-        modal.classList.remove('hidden'); // Show modal structure immediately
-
-        const template = await getTemplate('addItemModal');
-        if (!template) {
-            contentArea.innerHTML = '<p class="error">Error loading modal content.</p>';
-            return;
-        }
-
-        console.log(data.mediaType); // Debugging line
-        console.log(getValidStatuses(data.mediaType)); // Debugging line
-        // Prepare data for the modal template
-        const templateData = {
-            itemTitle: data.title,
-            mediaId: data.mediaId,
-            mediaType: data.mediaType,
-            imageUrl: data.imageUrl,
-            apiDescription: data.apiDescription,
-            validStatuses: getValidStatuses(data.mediaType)
-        };
-
-        contentArea.innerHTML = template(templateData);
-
-        // Add specific listeners for the newly added modal elements
-        contentArea.querySelector('#addItemForm')?.addEventListener('submit', handleAddItemSubmit);
-        contentArea.querySelector('#modalCloseBtn')?.addEventListener('click', closeAddItemModal);
-        contentArea.querySelector('#modalCancelBtn')?.addEventListener('click', closeAddItemModal);
-    }
-
-    // --- NEW: Open Details Modal ---
-    async function openDetailsModal(item, isLibraryItem) {
-        const modal = getInfoModal(); // Target the generic modal overlay
-        const contentArea = modal?.querySelector('#modalContentArea'); // Target content area
-        if (!modal || !contentArea) return;
-
-        contentArea.innerHTML = 'Loading details...';
-        modal.classList.remove('hidden'); // Show modal overlay
-
-        const template = await getTemplate('mediaDetailsModal');
-        if (!template) {
-             contentArea.innerHTML = '<p class="error">Error loading details template.</p>';
+        if (!username || !password) {
+             if(errorEl){ errorEl.textContent = 'Username and password required.'; errorEl.classList.remove('hidden'); }
              return;
-        }
+         }
+         if (password.length < 6) {
+             if(errorEl){ errorEl.textContent = 'Password must be at least 6 characters.'; errorEl.classList.remove('hidden'); }
+             return;
+         }
 
-        // Prepare data for the details template
-        const templateData = {
-            item: {
-                ...item,
-                // Ensure consistent naming used by the template
-                mediaType: item.type || item.mediaType,
-                apiDescription: item.description || item.apiDescription || ''
-            },
-            isLibraryItem: isLibraryItem
-        };
-
-        contentArea.innerHTML = template(templateData);
-
-        // Add listeners for elements INSIDE the details modal
-        contentArea.querySelector('#modalCloseBtn')?.addEventListener('click', closeInfoModal);
-        contentArea.querySelector('#modalCancelBtn')?.addEventListener('click', closeInfoModal); // Close button
-
-        // Re-attach handlers for action buttons IF they exist in this modal
-        contentArea.querySelector('.add-to-library-btn')?.addEventListener('click', handleOpenAddItemModalFromDetails); // Special handler needed
-        contentArea.querySelector('.edit-library-item-btn')?.addEventListener('click', handleEditLibraryItem);
-        contentArea.querySelector('.delete-library-item-btn')?.addEventListener('click', handleDeleteLibraryItem);
-    }
-
-    // --- NEW: Close Generic Info Modal ---
-    function closeInfoModal() {
-        const modal = getInfoModal();
-        modal?.classList.add('hidden');
-        const contentArea = modal?.querySelector('#modalContentArea');
-        if(contentArea) contentArea.innerHTML = ''; // Clear content
-    }
-
-
-    // --- NEW: Handler to open ADD modal from DETAILS modal ---
-    function handleOpenAddItemModalFromDetails(event) {
-        const button = event.target.closest('.add-to-library-btn');
-        if (!button) return;
-         // Data is already on the button from the details template rendering
-        const itemData = {
-            mediaId: button.dataset.mediaId,
-            mediaType: button.dataset.mediaType,
-            title: button.dataset.title,
-            imageUrl: button.dataset.imageUrl,
-            apiDescription: button.dataset.apiDescription,
-        };
-         closeInfoModal(); // Close the details modal first
-         // Short delay to allow closing animation
-         setTimeout(() => {
-             openAddItemModal(itemData); // Now open the add item modal
-         }, 100); // Adjust delay if needed
-    }
-
-     function closeAddItemModal() {
-        const modal = getAddItemModal();
-        modal?.classList.add('hidden');
-        const contentArea = getModalContentArea();
-        if(contentArea) contentArea.innerHTML = ''; // Clear content
-    }
-
-    async function handleOpenModalClick(event) {
-        const button = event.target.closest('.add-to-library-btn'); // Find button even if icon inside is clicked
-        if (!button) return;
-
-        const itemData = {
-            mediaId: button.dataset.mediaId,
-            mediaType: button.dataset.mediaType,
-            title: button.dataset.title,
-            imageUrl: button.dataset.imageUrl,
-            apiDescription: button.dataset.apiDescription,
-        };
-        openAddItemModal(itemData);
-    }
-
-     async function handleAddItemSubmit(event) {
-        event.preventDefault();
-        const form = event.target;
-        const modalError = form.querySelector('#modalError');
-        modalError?.classList.add('hidden');
-
-        const userStatus = form.querySelector('#modalUserStatus').value;
-        const userRatingInput = form.querySelector('#modalUserRating').value;
-        const userDescription = form.querySelector('#modalUserDescription').value.trim();
-
-        const mediaId = form.querySelector('#modalMediaId').value;
-        const mediaType = form.querySelector('#modalMediaType').value;
-        const title = form.querySelector('#modalTitleData').value;
-        const imageUrl = form.querySelector('#modalImageUrlData').value;
-        const apiDescription = form.querySelector('#modalApiDescriptionData').value;
-
-        let userRating = null;
-        if (userRatingInput) {
-            userRating = parseInt(userRatingInput, 10);
-            if (isNaN(userRating) || userRating < 1 || userRating > 20) {
-                modalError.textContent = 'Rating must be between 1 and 20.';
-                modalError.classList.remove('hidden');
-                return;
-            }
-        }
-        // Construct payload for API
-        const payload = {
-            mediaId, mediaType, title, imageUrl, apiDescription, // Core data
-            userStatus, // User input
-            ...(userRating !== null && { userRating }), // Optional user input
-            ...(userDescription && { userDescription }) // Optional user input
-        };
-
-        const result = await makeApiRequest('/library', 'POST', payload);
-
-        if (result) {
-            displayStatus(`"${title}" added to library!`, false, true);
-            closeAddItemModal();
-            fetchLibrary();
-        } else {
-             if(modalError){
-                 modalError.textContent = statusMessage.textContent.replace('Status: Error: ', '');
-                 modalError.classList.remove('hidden');
-             }
-        }
-    }
-
-    // --- Edit/Delete Handlers (Keep prompt-based for brevity, or upgrade later) ---
-    async function handleEditLibraryItem(event) {
-        const button = event.target.closest('.edit-library-item-btn');
-        if (!button) return;
-        const itemId = button.dataset.id;
-        closeInfoModal();
-        // In a real app, you'd fetch the item details first to pre-fill prompts
-        // and know the mediaType to validate status.
-        // For simplicity, we'll ask for everything again.
-
-        const userStatus = prompt(`Enter new status (e.g., watched, reading, playing) or leave blank for no change:`);
-        const userRatingInput = prompt(`Enter new rating (1-20) or leave blank for no change:`);
-        const userDescription = prompt(`Enter new description or leave blank for no change:`);
-
-        const updateData = {};
-        if (userStatus) updateData.userStatus = userStatus.trim().toLowerCase(); // Basic validation needed based on type!
-        if (userRatingInput) {
-            const rating = parseInt(userRatingInput, 10);
-             if (!isNaN(rating) && rating >= 1 && rating <= 20) {
-                updateData.userRating = rating;
+         try {
+             showSpinner('registerSpinner', true); // Assuming spinner ID
+             const result = await apiRequest('/auth/register', 'POST', { username, password });
+             if (messageEl) {
+                messageEl.textContent = result.message || 'Registration successful! Please login.';
+                messageEl.classList.remove('hidden');
              } else {
-                 return displayStatus('Invalid rating entered.', true);
+                 showStatus('Registration successful! Please login.', 'success');
              }
-        }
-        // Allow setting description to empty string if user enters something then clears it?
-        // Current prompt returns null if cancelled, empty string if OK'd with no text.
-        if (userDescription !== null) { // Check if prompt wasn't cancelled
-             updateData.userDescription = userDescription.trim();
-        }
+             form.reset(); // Clear form on success
+         } catch (error) {
+             const message = error.data?.message || error.message || 'Registration failed.';
+              if(errorEl){ errorEl.textContent = message; errorEl.classList.remove('hidden'); }
+         } finally {
+             showSpinner('registerSpinner', false);
+         }
+    }
 
-
-        if (Object.keys(updateData).length === 0) {
-             return displayStatus('No changes entered.');
-        }
-
-         // ** Crucial: Backend needs to validate status based on item's mediaType **
-         // Frontend can't easily do this without fetching item first.
-
-        const result = await makeApiRequest(`/library/${itemId}`, 'PUT', updateData, true);
-        if (result) {
-            displayStatus(`Library item ${itemId} updated.`);
-            fetchLibrary(); // Refresh view
-        }
-     }
-
-
-    async function handleDeleteLibraryItem(event) {
-         const button = event.target.closest('.delete-library-item-btn');
-        if (!button) return;
-        const itemId = button.dataset.id;
-        closeInfoModal();
-        if (!confirm(`Are you sure you want to delete library item ${itemId}?`)) return;
-
-        const result = await makeApiRequest(`/library/${itemId}`, 'DELETE');
-        if (result) {
-            displayStatus(`Library item ${itemId} deleted.`, false, true);
-            fetchLibrary(); // Refresh view
+    // Handle Logout
+    async function handleLogout() {
+        try {
+            showStatus('Logging out...', 'info');
+            await apiRequest('/auth/logout', 'POST');
+            showStatus('Logout successful. Redirecting...', 'success');
+            window.location.href = '/'; // Redirect to home
+        } catch (error) {
+            // Error already shown by apiRequest
+            showStatus('Logout failed.', 'error');
         }
     }
 
-     // --- Helper to get valid statuses (no changes) ---
+     // Helper to get valid statuses based on media type (client-side)
      function getValidStatuses(mediaType) {
-        switch (mediaType) {
+        switch (mediaType?.toLowerCase()) {
             case 'movie':
             case 'series': return ['to watch', 'watching', 'watched'];
             case 'book': return ['to read', 'reading', 'read'];
             case 'video game': return ['to play', 'playing', 'played'];
-            default: return [];
+            default: return ['to watch', 'watching', 'watched', 'to read', 'reading', 'read', 'to play', 'playing', 'played']; // Default or fallback
         }
     }
 
-    // --- Initialize Page ---
-    function initializePage() {
-        console.log('Initializing page...');
-
+    // --- Initialization ---
+    function initialize() {
         // Global Listeners
         logoutBtn?.addEventListener('click', handleLogout);
-        getAddItemModal()?.addEventListener('click', (event) => { // Close modal on overlay click
-            if (event.target === getAddItemModal()) closeAddItemModal();
+
+        // Use event delegation on main content area for dynamic elements
+        mainContent?.addEventListener('click', handleMainContentClick);
+
+        // Modal Listeners (delegated or direct)
+        infoModal?.addEventListener('click', handleInfoModalClick);
+        infoModal?.addEventListener('submit', (event) => { // Handle form submission inside modal
+            if (event.target.id === 'itemForm') {
+                handleItemFormSubmit(event);
+            }
         });
 
-        // Page Specific Listeners
-        const pathname = window.location.pathname;
-
-        if (pathname === '/login') {
-            getLoginForm()?.addEventListener('submit', handleLogin);
-            getRegisterForm()?.addEventListener('submit', handleRegister);
-        } else if (pathname === '/library') {
-            getSearchForm()?.addEventListener('submit', handleSearch);
-            const controls = getLibraryControls();
-            if (controls) {
-                controls.querySelector('#getLibraryBtn')?.addEventListener('click', fetchLibrary);
-                controls.querySelector('#filterMediaType')?.addEventListener('change', fetchLibrary);
-                controls.querySelector('#filterStatus')?.addEventListener('change', fetchLibrary);
-                controls.querySelector('#filterMinRating')?.addEventListener('input', fetchLibrary); // Use input for faster feedback? Debounce?
-                controls.querySelector('#filterMaxRating')?.addEventListener('input', fetchLibrary);
+        deleteConfirmModal?.addEventListener('click', (event) => {
+            if (event.target.matches('#deleteConfirmBtn')) handleDeleteConfirm();
+            if (event.target.matches('#deleteCancelBtn') || event.target.matches('#deleteModalCloseBtn') || event.target === deleteConfirmModal) {
+                 closeModal(deleteConfirmModal);
+                 itemToDeleteId = null; // Clear ID on cancel/close
             }
+        });
 
-            // Event delegation for dynamic results area content
-            const resultsTarget = getResultsArea();
-            resultsTarget?.addEventListener('click', handleOpenModalClick);
-            resultsTarget?.addEventListener('click', handleEditLibraryItem);
-            resultsTarget?.addEventListener('click', handleDeleteLibraryItem);
 
-            // Initial library load
-            fetchLibrary();
+        // Page Specific Initializations / Listeners
+        if (searchForm) {
+            searchForm.addEventListener('submit', handleSearch);
         }
+
+        if (libraryControls) {
+            // Use event delegation or listen to specific inputs for filtering
+            libraryControls.addEventListener('change', fetchLibrary); // Fetch on any filter change
+            libraryControls.addEventListener('input', (e) => { // Handle input for range filters if needed (debounced?)
+                if (e.target.type === 'number') {
+                     fetchLibrary(); // Basic fetch on number input change
+                     // Add debounce here if API calls become too frequent
+                }
+            });
+             libraryControls.querySelector('#getLibraryBtn')?.addEventListener('click', fetchLibrary); // Refresh button
+
+            // Initial library load on library page
+            if (window.location.pathname === '/library') {
+                fetchLibrary();
+            }
+        }
+
+        if (loginForm) {
+            loginForm.addEventListener('submit', handleLogin);
+        }
+        if (registerForm) {
+            registerForm.addEventListener('submit', handleRegister);
+        }
+
+        console.log('MediaTracker Initialized.');
     }
 
-    // --- Run Initialization ---
-    initializePage();
+    // Wait for DOM content to be loaded before initializing
+    document.addEventListener('DOMContentLoaded', initialize);
 
-})(); // End IIFE
+})();

@@ -1,28 +1,31 @@
-{{! Template used by client-side JS for search results and library items }}
+{{! views/partials/mediaCard.hbs }}
 {{#each items}}
-<div class="{{../cardClass}}">
-    <img src="{{#if imageUrl}}{{imageUrl}}{{else}}/images/placeholder.png{{/if}}" alt="{{title}}" class="card-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+<div class="{{../cardClass}}" data-item-json="{{json this}}"> {{!-- Store item data --}}
+    <img src="{{defaultIfEmpty imageUrl '/images/placeholder.png'}}" alt="{{title}}" class="card-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
     <div class="card-content">
         <h3 class="card-title">{{title}}</h3>
         <p class="card-meta">
-            <span class="tag tag-{{mediaType}}">{{mediaType}}</span>
+            <span class="tag tag-{{classify (defaultIfEmpty mediaType type)}}">{{defaultIfEmpty mediaType type}}</span>
             {{#if releaseDate}}<span>Released: {{formatYear releaseDate}}</span>{{/if}}
-            {{#if ../isSearchResult}}
-                {{#if rating}}<span>API Rating: {{rating}}/20</span>{{/if}}
-                {{#if authors}}<span>Author(s): {{join authors ", "}}</span>{{/if}}
-            {{else}}
-                {{! Library item specific meta }}
+            {{#if publishedDate}}<span>Published: {{formatYear publishedDate}}</span>{{/if}} {{!-- For books --}}
+             {{#if authors}}<span>Author(s): {{join authors ", "}}</span>{{/if}}
+
+            {{!-- API Rating (from search or stored) --}}
+            {{#if rating}}<span>API Rating: {{rating}}/20</span>{{/if}}
+
+            {{#unless ../isSearchResult}} {{!-- Library item specific meta --}}
                  <span class="tag tag-status-{{classify userStatus}}">Status: <strong>{{userStatus}}</strong></span>
                  {{#if userRating}}<span>My Rating: {{userRating}}/20</span>{{/if}}
-                <span>Added: {{formatDate addedAt}}</span>
-                {{#if watchedAt}}<span>Completed: {{formatDate watchedAt}}</span>{{/if}}
-            {{/if}}
+                 {{#if addedAt}}<span>Added: {{formatDate addedAt}}</span>{{/if}}
+                 {{#if watchedAt}}<span>Completed: {{formatDate watchedAt}}</span>{{/if}}
+            {{/unless}}
         </p>
-        <p class="card-description">
+        <p class="card-description truncated">
             {{#if ../isSearchResult}}
-                {{truncate (defaultIfEmpty description apiDescription) 150}}
+                {{! Use description from search, fallback to apiDescription if structure differs }}
+                {{defaultIfEmpty description apiDescription}}
             {{else}}
-                <strong>My Notes:</strong> {{#if userDescription}}{{userDescription}}{{else}}None{{/if}}
+                <strong>My Notes:</strong> {{defaultIfEmpty userDescription "None"}}
             {{/if}}
         </p>
         {{#unless ../isSearchResult}}
@@ -33,21 +36,20 @@
 
         <div class="card-actions">
             {{#if ../isSearchResult}}
-                <button class="btn btn-primary btn-small add-to-library-btn"
-                        data-media-id="{{id}}"
-                        data-media-type="{{mediaType}}"
-                        data-title="{{title}}"
-                        data-image-url="{{imageUrl}}"
-                        {{!-- Use 'description' from search result for consistency if available --}}
-                        data-api-description="{{defaultIfEmpty description apiDescription}}"
-                        >Add to Library</button>
+                 {{!-- Add button triggers modal via event delegation --}}
+                <button class="btn btn-primary btn-small action-add">Add to Library</button>
             {{else}}
-                <button class="btn btn-secondary btn-small edit-library-item-btn" data-id="{{id}}">Edit</button>
-                <button class="btn btn-danger btn-small delete-library-item-btn" data-id="{{id}}">Delete</button>
+                 {{!-- Edit/Delete buttons trigger actions via event delegation --}}
+                <button class="btn btn-secondary btn-small action-edit">Edit</button>
+                <button class="btn btn-danger btn-small action-delete">Delete</button>
             {{/if}}
+             {{!-- Details button triggers modal via event delegation (even on library items) --}}
+             <button class="btn btn-secondary btn-small action-details">Details</button>
         </div>
     </div>
 </div>
 {{else}}
-    <p class="placeholder-text">{{../placeholder}}</p>
+    {{#unless ../hidePlaceholder}} {{!-- Allow hiding placeholder during loading --}}
+    <p class="placeholder-text">{{defaultIfEmpty ../placeholder "No items found."}}</p>
+    {{/unless}}
 {{/each}}

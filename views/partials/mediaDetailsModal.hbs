@@ -1,52 +1,110 @@
 {{! views/partials/mediaDetailsModal.hbs }}
-<button id="modalCloseBtn" class="modal-close-btn" aria-label="Close">×</button>
+<button class="modal-close-btn" aria-label="Close">×</button>
 
 <div class="media-details-modal">
     <div class="details-header">
-        <img src="{{#if item.imageUrl}}{{item.imageUrl}}{{else}}/images/placeholder.png{{/if}}" alt="{{item.title}}" class="details-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+        <img src="{{defaultIfEmpty item.imageUrl '/images/placeholder.png'}}" alt="{{item.title}}" class="details-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
         <div class="details-header-info">
-            <h2>{{item.title}}</h2>
+            {{!-- Title and Year --}}
+            <h2>{{item.title}} {{#if item.releaseDate}}({{formatYear item.releaseDate}}){{/if}}</h2>
+
+            {{!-- Common Meta --}}
             <p class="details-meta">
-                <span class="tag tag-{{item.mediaType}}">{{item.mediaType}}</span>
-                 {{#if item.releaseDate}}<span>Released: {{formatYear item.releaseDate}}</span>{{/if}}
-                 {{#if item.authors}}<span>Author(s): {{join item.authors ", "}}</span>{{/if}}
-                 {{!-- API Rating (only if available from search/stored) --}}
-                 {{#if item.rating}}<span>API Rating: {{item.rating}}/20</span>{{/if}}
+                <span class="tag tag-{{classify item.mediaType}}">{{capitalize item.mediaType}}</span>
+                 {{#if item.genres.length}}
+                    <span>Genres: {{join item.genres ", "}}</span>
+                 {{/if}}
+                 {{#if item.rating}} {{!-- Display normalized rating --}}
+                    <span>Rating: {{item.rating}}/20</span>
+                 {{/if}}
+            </p>
+            {{!-- Type-Specific Meta Links/Info --}}
+            <p class="details-meta">
+                 {{#if item.imdbId}}
+                    <span><a href="https://www.imdb.com/title/{{item.imdbId}}/" target="_blank" rel="noopener noreferrer">IMDb</a></span>
+                 {{/if}}
+                  {{#if item.googleBooksLink}}
+                    <span><a href="{{item.googleBooksLink}}" target="_blank" rel="noopener noreferrer">Google Books</a></span>
+                 {{/if}}
+                 {{#if item.igdbLink}}
+                    <span><a href="{{item.igdbLink}}" target="_blank" rel="noopener noreferrer">IGDB</a></span>
+                 {{/if}}
+                 {{!-- Authors (Books) --}}
+                 {{#if item.authors.length}}<span>Author(s): {{join item.authors ", "}}</span>{{/if}}
+                 {{!-- Platforms (Games) --}}
+                 {{#if item.platforms.length}}<span>Platform(s): {{join item.platforms ", "}}</span>{{/if}}
             </p>
         </div>
     </div>
 
     <div class="details-body">
-        <h3>Original Description</h3>
-        <p>{{#if item.apiDescription}}{{item.apiDescription}}{{else}}No description available.{{/if}}</p>
+        <h3>Overview/Description</h3>
+        <p>{{defaultIfEmpty item.description item.overview "No description available."}}</p>
 
+        {{!-- Movie/Series Specific --}}
+        {{#if item.cast.length}}
+            <hr><h4>Cast</h4>
+            <ul class="details-list">
+                {{#each item.cast}}<li><strong>{{this.name}}</strong> as {{this.character}}</li>{{/each}}
+            </ul>
+        {{/if}}
+        {{#if item.producers.length}}
+            <h4>Producers</h4><p>{{join item.producers ", "}}</p>
+        {{/if}}
+
+        {{!-- Book Specific --}}
+        {{#eq item.mediaType 'book'}}
+            <hr>
+            {{#if item.publisher}}<h4>Publisher</h4><p>{{item.publisher}}</p>{{/if}}
+            {{#if item.pageCount}}<h4>Pages</h4><p>{{item.pageCount}}</p>{{/if}}
+        {{/eq}}
+
+        {{!-- Video Game Specific --}}
+         {{#eq item.mediaType 'video game'}}
+            <hr>
+            {{#if item.developers.length}}<h4>Developer(s)</h4><p>{{join item.developers ", "}}</p>{{/if}}
+            {{#if item.publishers.length}}<h4>Publisher(s)</h4><p>{{join item.publishers ", "}}</p>{{/if}}
+            {{#if item.screenshots.length}}
+                <h4>Screenshots</h4>
+                <div class="details-screenshots">
+                    {{#each item.screenshots}} <img src="{{this}}" alt="Screenshot" loading="lazy"> {{/each}}
+                </div>
+            {{/if}}
+             {{#if item.videos.length}}
+                <h4>Videos</h4>
+                 <ul class="details-list">
+                    {{#each item.videos}}<li><a href="{{this.youtubeLink}}" target="_blank" rel="noopener noreferrer">Watch Trailer/Video (YouTube)</a></li>{{/each}}
+                 </ul>
+            {{/if}}
+        {{/eq}}
+
+
+        {{!-- Library Info (If Applicable) --}}
         {{#if isLibraryItem}}
             <hr>
             <h3>My Library Info</h3>
             <p class="details-meta">
                 <span class="tag tag-status-{{classify item.userStatus}}">Status: <strong>{{item.userStatus}}</strong></span>
                 {{#if item.userRating}}<span>My Rating: {{item.userRating}}/20</span>{{/if}}
-                <span>Added: {{formatDate item.addedAt}}</span>
-                {{#if item.watchedAt}}<span>Completed: {{formatDate item.watchedAt}}</span>{{/if}}
+                {{#if item.addedAt}}<span>Added: {{formatDate item.addedAt}}</span>{{/if}}
+                 {{#if item.watchedAt}}<span>Completed: {{formatDate item.watchedAt}}</span>{{/if}}
             </p>
             <h4>My Notes:</h4>
-            <p>{{#if item.userDescription}}{{item.userDescription}}{{else}}No personal notes added.{{/if}}</p>
+            <p>{{defaultIfEmpty item.userDescription "No personal notes added."}}</p>
         {{/if}}
     </div>
 
-    <div class="modal-actions details-actions">
-        {{#if isLibraryItem}}
-            <button class="btn btn-secondary edit-library-item-btn" data-id="{{item.id}}">Edit</button>
-            <button class="btn btn-danger delete-library-item-btn" data-id="{{item.id}}">Delete</button>
-        {{else}}
-            <button class="btn btn-primary add-to-library-btn"
-                    data-media-id="{{item.id}}"
-                    data-media-type="{{item.mediaType}}"
-                    data-title="{{item.title}}"
-                    data-image-url="{{item.imageUrl}}"
-                    data-api-description="{{item.apiDescription}}"
-                    >Add to Library</button>
-        {{/if}}
-        <button type="button" id="modalCancelBtn" class="btn btn-secondary">Close</button>
+    {{!-- Action Buttons --}}
+    <div class="modal-actions details-actions" data-item-json="{{json item}}">
+        <div>
+            {{#if isLibraryItem}}
+                <button class="btn btn-secondary action-edit">Edit</button>
+                <button class="btn btn-danger action-delete">Delete</button>
+            {{else}}
+                <button class="btn btn-primary action-add">Add to Library</button>
+            {{/if}}
+        </div>
+         <button type="button" class="btn btn-secondary modal-cancel-btn">Close</button>
     </div>
+     <p class="modal-error-message hidden"></p>
 </div>
