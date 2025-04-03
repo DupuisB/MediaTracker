@@ -34,29 +34,40 @@ function initializeDatabase() {
         });
 
         // Create Library Items table
+        // Create Library Items table with NEW COLUMNS
         db.run(`
-      CREATE TABLE IF NOT EXISTS library_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
-        mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
-        mediaId TEXT NOT NULL, -- ID from external API
-        userDescription TEXT,
-        userRating INTEGER CHECK(userRating >= 1 AND userRating <= 20),
-        userStatus TEXT NOT NULL CHECK(userStatus IN ('to watch', 'to read', 'to play', 'watching', 'reading', 'playing', 'watched', 'read', 'played')),
-        addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        watchedAt DATETIME, -- Timestamp when marked as watched/read/played
-        FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
-        UNIQUE(userId, mediaType, mediaId) -- Prevent adding the same item multiple times per user
-      )
-    `, (err) => {
-            if (err) {
-                console.error('Error creating library_items table:', err.message);
-            } else {
-                console.log('Library Items table checked/created successfully.');
-            }
-        });
-
+            CREATE TABLE IF NOT EXISTS library_items (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              userId INTEGER NOT NULL,
+              mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
+              mediaId TEXT NOT NULL, -- ID from external API
+  
+              -- NEW: Core media details stored at time of adding
+              title TEXT,
+              imageUrl TEXT,
+              apiDescription TEXT, -- Original description from API
+  
+              -- User-specific details
+              userDescription TEXT,
+              userRating INTEGER CHECK(userRating >= 1 AND userRating <= 20),
+              userStatus TEXT NOT NULL CHECK(userStatus IN ('to watch', 'to read', 'to play', 'watching', 'reading', 'playing', 'watched', 'read', 'played')),
+  
+              -- Timestamps
+              addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+              watchedAt DATETIME, -- Timestamp when marked as watched/read/played
+  
+              FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+              UNIQUE(userId, mediaType, mediaId) -- Prevent adding the same item multiple times per user
+            )
+          `, (err) => {
+              if (err) {
+                  console.error('Error creating library_items table:', err.message);
+              } else {
+                  console.log('Library Items table checked/created successfully.');
+              }
+          });
+  
         // Add triggers to automatically update 'updatedAt' timestamp
         // Drop existing trigger first (optional, good for development)
         db.run(`DROP TRIGGER IF EXISTS update_library_item_timestamp;`);

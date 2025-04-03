@@ -127,6 +127,43 @@
         <p>Watchlist App © 2024</p>
     </footer>
 
+    <!-- Add Item Modal -->
+    <div id="addItemModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <button id="modalCloseBtn" class="modal-close-btn" aria-label="Close">×</button>
+            <h2 id="modalTitle">Add Item to Library</h2>
+            <form id="addItemForm">
+                <!-- Hidden fields to store data from search result -->
+                <input type="hidden" id="modalMediaId">
+                <input type="hidden" id="modalMediaType">
+                <input type="hidden" id="modalTitleData">
+                <input type="hidden" id="modalImageUrlData">
+                <input type="hidden" id="modalApiDescriptionData">
+
+                <div class="form-group">
+                    <label for="modalUserStatus">Your Status:</label>
+                    <select id="modalUserStatus" required>
+                        <!-- Options will be populated by JS -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modalUserRating">Your Rating (1-20):</label>
+                    <input type="number" id="modalUserRating" min="1" max="20" placeholder="Optional">
+                </div>
+                <div class="form-group">
+                    <label for="modalUserDescription">Your Notes:</label>
+                    <textarea id="modalUserDescription" rows="3" placeholder="Optional"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="modalCancelBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Item</button>
+                </div>
+                    <p id="modalError" class="modal-error-message hidden"></p>
+            </form>
+        </div>
+    </div>
+    <!-- End Add Item Modal -->
+    
     <script src="script.js"></script>
 </body>
 </html>

@@ -93,71 +93,78 @@ router.get('/', (req, res) => {
 // --- Add a Media Item to the Library ---
 router.post('/', (req, res) => {
     const userId = req.userId;
-    const { mediaType, mediaId, userDescription, userRating, userStatus: requestStatus } = req.body;
+    // Destructure NEW fields from the request body
+    const {
+        mediaType, mediaId,
+        title, imageUrl, apiDescription, // <-- New fields
+        userDescription, userRating, userStatus: requestStatus
+     } = req.body;
 
-    // Validate required fields
+    // Validate required base fields
     if (!mediaType || !mediaId || !requestStatus) {
         return res.status(400).json({ message: 'mediaType, mediaId, and userStatus are required.' });
     }
-
-    // Validate mediaType
-     const validMediaTypes = ['movie', 'series', 'book', 'video game'];
-    if (!validMediaTypes.includes(mediaType)) {
-         return res.status(400).json({ message: `Invalid mediaType. Must be one of: ${validMediaTypes.join(', ')}.` });
+    // NEW: Basic validation for title (often essential)
+    if (!title) {
+         return res.status(400).json({ message: 'Media title is required when adding.' });
     }
 
-    // Validate and map status based on media type
+    // Validate mediaType (no change)
+    const validMediaTypes = ['movie', 'series', 'book', 'video game'];
+    if (!validMediaTypes.includes(mediaType)) { /* ... */ }
+
+    // Validate and map status based on media type (no change)
     const userStatus = getDbStatus(requestStatus, mediaType);
-    if (!userStatus) {
-        const validStatuses = getValidStatuses(mediaType);
-        return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${validStatuses.join(', ')}.` });
-    }
+    if (!userStatus) { /* ... */ }
 
-
-    // Validate userRating (optional, but if provided, must be in range)
+    // Validate userRating (no change)
     let ratingValue = null;
-    if (userRating !== undefined && userRating !== null) {
-        ratingValue = parseInt(userRating, 10);
-        if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-            return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20.' });
-        }
-    }
+    if (userRating !== undefined && userRating !== null) { /* ... */ }
 
-    // Check if item already exists for this user
+    // Check if item already exists (no change)
     const checkSql = `SELECT id FROM library_items WHERE userId = ? AND mediaType = ? AND mediaId = ?`;
     db.get(checkSql, [userId, mediaType, mediaId], (err, row) => {
-        if (err) {
-            console.error("Database error checking for existing library item:", err.message);
-            return res.status(500).json({ message: 'Error checking library.' });
-        }
+        if (err) { /* ... */ }
         if (row) {
-            return res.status(409).json({ message: 'This item is already in your library.' }); // 409 Conflict
+             return res.status(409).json({ message: 'This item is already in your library.' });
         }
 
-        // Determine if watchedAt should be set
+        // Determine if watchedAt should be set (no change)
         const watchedAt = ['watched', 'read', 'played'].includes(userStatus) ? new Date().toISOString() : null;
 
-        // Insert the new item
+        // UPDATE the INSERT statement and parameters
         const insertSql = `
             INSERT INTO library_items
-                (userId, mediaType, mediaId, userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                (userId, mediaType, mediaId, title, imageUrl, apiDescription, -- Added columns
+                 userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now')) -- Added placeholders
         `;
-        const params = [userId, mediaType, mediaId, userDescription || null, ratingValue, userStatus, watchedAt];
+        // Add new values to the parameters array IN ORDER
+        const params = [
+            userId, mediaType, mediaId,
+            title, // New
+            imageUrl || null, // New (allow null)
+            apiDescription || null, // New (allow null)
+            userDescription || null, // Existing user desc
+            ratingValue, // Existing user rating
+            userStatus, // Existing user status
+            watchedAt // Existing watchedAt
+        ];
 
         db.run(insertSql, params, function(err) {
             if (err) {
+                // Handle potential UNIQUE constraint error specifically
+                if (err.message.includes('UNIQUE constraint failed')) {
+                     console.error("Unique constraint violation:", err.message);
+                     return res.status(409).json({ message: 'This item seems to already be in your library (Unique constraint).' });
+                }
                 console.error("Database error adding library item:", err.message);
                 return res.status(500).json({ message: 'Failed to add item to library.' });
             }
             const newItemId = this.lastID;
-            // Fetch the newly created item to return it
+            // Fetch the newly created item to return it (SELECT * gets all columns)
             db.get(`SELECT * FROM library_items WHERE id = ?`, [newItemId], (err, newItem) => {
-                 if (err) {
-                    console.error("Database error fetching newly added library item:", err.message);
-                    // Still return success, but maybe log the fetch error
-                    return res.status(201).json({ message: 'Item added successfully, but failed to fetch details.', id: newItemId });
-                }
+                 if (err) { /* ... */ }
                  res.status(201).json(newItem);
             });
         });

@@ -26,6 +26,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const filterMinRatingInput = document.getElementById('filterMinRating');
     const filterMaxRatingInput = document.getElementById('filterMaxRating');
 
+    const addItemModal = document.getElementById('addItemModal');
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    const modalCancelBtn = document.getElementById('modalCancelBtn');
+    const addItemForm = document.getElementById('addItemForm');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalUserStatusSelect = document.getElementById('modalUserStatus');
+    const modalUserRatingInput = document.getElementById('modalUserRating');
+    const modalUserDescription = document.getElementById('modalUserDescription');
+    const modalError = document.getElementById('modalError');
+    
+    // Hidden inputs for data passing
+    const modalMediaIdInput = document.getElementById('modalMediaId');
+    const modalMediaTypeInput = document.getElementById('modalMediaType');
+    const modalTitleDataInput = document.getElementById('modalTitleData');
+    const modalImageUrlDataInput = document.getElementById('modalImageUrlData');
+    const modalApiDescriptionDataInput = document.getElementById('modalApiDescriptionData');
+
+
     // --- Helper Functions ---
     function displayStatus(message, isError = false) {
         statusMessage.textContent = `Status: ${message}`;
@@ -133,8 +151,9 @@ document.addEventListener('DOMContentLoaded', () => {
         results.forEach(item => {
             const card = document.createElement('div');
             card.className = 'result-card';
+            // Store ALL relevant data in data-* attributes
             card.innerHTML = `
-                <img src="${item.imageUrl || ''}" alt="${item.title || 'No Title'}" class="card-image ${!item.imageUrl ? 'no-image' : ''}" onerror="this.style.display='none'; this.nextElementSibling.querySelector('.card-description').insertAdjacentHTML('beforebegin', '<p class=\'card-meta\'><em>Image failed to load</em></p>');">
+                <img src="${item.imageUrl || './placeholder.png'}" alt="${item.title || 'No Title'}" class="card-image ${!item.imageUrl ? 'no-image' : ''}" onerror="this.onerror=null; this.src='./placeholder.png';">
                 <div class="card-content">
                     <h3 class="card-title">${item.title || 'N/A'}</h3>
                     <p class="card-meta">
@@ -149,6 +168,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 data-media-id="${item.id}"
                                 data-media-type="${item.type}"
                                 data-title="${item.title || ''}"
+                                data-image-url="${item.imageUrl || ''}"
+                                data-api-description="${item.description || ''}"
                                 >Add to Library</button>
                     </div>
                 </div>
@@ -167,21 +188,19 @@ document.addEventListener('DOMContentLoaded', () => {
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'library-card';
-            // You might need to fetch full details if only IDs are stored,
-            // but for now, assume basic info is available or stored in library_items
-            // (Requires joining tables or fetching details separately in a real app)
-            // For this example, we'll display what's in the library_items table.
+            // NOW use the stored title and imageUrl
             card.innerHTML = `
-                <!-- Add image display if you store/fetch it -->
+                 <img src="${item.imageUrl || './placeholder.png'}" alt="${item.title || 'No Title'}" class="card-image ${!item.imageUrl ? 'no-image' : ''}" onerror="this.onerror=null; this.src='./placeholder.png';">
                 <div class="card-content">
-                    <h3 class="card-title">Item ID: ${item.mediaId} (${item.mediaType})</h3>
-                     <p class="card-meta">
+                    <h3 class="card-title">${item.title || `Item ${item.mediaId}`} (${item.mediaType})</h3>
+                    <p class="card-meta">
                         <span>Status: <strong>${item.userStatus || 'N/A'}</strong></span>
                         ${item.userRating !== null ? `<span>My Rating: ${item.userRating}/20</span>` : ''}
                         <span>Added: ${new Date(item.addedAt).toLocaleDateString()}</span>
                         ${item.watchedAt ? `<span>Completed: ${new Date(item.watchedAt).toLocaleDateString()}</span>` : ''}
                     </p>
-                    <p class="card-description">${item.userDescription || 'No personal description added.'}</p>
+                    <p class="card-description"><strong>My Notes:</strong> ${item.userDescription || 'None'}</p>
+                    ${item.apiDescription ? `<details class="api-desc-details"><summary>Original Description</summary><p>${item.apiDescription}</p></details>` : ''}
                     <div class="card-actions">
                          <button class="btn btn-secondary btn-small edit-library-item-btn" data-id="${item.id}">Edit</button>
                          <button class="btn btn-danger btn-small delete-library-item-btn" data-id="${item.id}">Delete</button>
@@ -192,6 +211,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+         // --- Modal Handling Functions ---
+         function openAddItemModal(data) {
+            // Populate hidden fields
+            modalMediaIdInput.value = data.mediaId;
+            modalMediaTypeInput.value = data.mediaType;
+            modalTitleDataInput.value = data.title;
+            modalImageUrlDataInput.value = data.imageUrl;
+            modalApiDescriptionDataInput.value = data.apiDescription;
+    
+            // Set visible title
+            modalTitle.textContent = `Add "${data.title}"`;
+    
+            // Populate status dropdown
+            populateStatusDropdown(modalUserStatusSelect, data.mediaType);
+    
+            // Reset form fields & error
+            addItemForm.reset();
+            modalError.classList.add('hidden');
+            modalError.textContent = '';
+    
+            // Show modal
+            addItemModal.classList.remove('hidden');
+        }
+    
+        function closeAddItemModal() {
+            addItemModal.classList.add('hidden');
+            // Optional: Clear fields again on close just in case
+             addItemForm.reset();
+             modalError.classList.add('hidden');
+             modalError.textContent = '';
+        }
+    
+        function populateStatusDropdown(selectElement, mediaType) {
+            selectElement.innerHTML = ''; // Clear existing
+            const statuses = getValidStatuses(mediaType);
+            if (!statuses.length) {
+                selectElement.disabled = true;
+                selectElement.innerHTML = '<option>Invalid Type</option>';
+                return;
+            }
+            selectElement.disabled = false;
+            statuses.forEach(status => {
+                const option = document.createElement('option');
+                option.value = status;
+                option.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+                selectElement.appendChild(option);
+            });
+        }
+    
     // --- Event Handlers ---
     function handleLogout() {
         jwtToken = null;
@@ -376,6 +444,86 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function handleOpenModalClick(event) {
+        if (!event.target.classList.contains('add-to-library-btn')) return;
+
+        const button = event.target;
+        // Retrieve all data needed for the modal and the API call
+        const itemData = {
+            mediaId: button.dataset.mediaId,
+            mediaType: button.dataset.mediaType,
+            title: button.dataset.title,
+            imageUrl: button.dataset.imageUrl,
+            apiDescription: button.dataset.apiDescription,
+        };
+        openAddItemModal(itemData);
+    }
+
+    async function handleAddItemSubmit(event) {
+        event.preventDefault(); // Prevent default form submission
+        modalError.classList.add('hidden'); // Hide previous error
+
+        // Get user input from modal
+        const userStatus = modalUserStatusSelect.value;
+        const userRatingInput = modalUserRatingInput.value;
+        const userDescription = modalUserDescription.value.trim();
+
+        // Get media data from hidden fields
+        const mediaId = modalMediaIdInput.value;
+        const mediaType = modalMediaTypeInput.value;
+        const title = modalTitleDataInput.value;
+        const imageUrl = modalImageUrlDataInput.value;
+        const apiDescription = modalApiDescriptionDataInput.value;
+
+        // Basic validation
+        if (!userStatus) {
+             modalError.textContent = 'Please select a status.';
+             modalError.classList.remove('hidden');
+             return;
+        }
+        let userRating = null;
+        if (userRatingInput) {
+            userRating = parseInt(userRatingInput, 10);
+            if (isNaN(userRating) || userRating < 1 || userRating > 20) {
+                modalError.textContent = 'Rating must be between 1 and 20.';
+                modalError.classList.remove('hidden');
+                return;
+            }
+        }
+
+        // Construct payload for API
+        const payload = {
+            mediaId, mediaType, title, imageUrl, apiDescription, // Core data
+            userStatus, // User input
+            ...(userRating !== null && { userRating }), // Optional user input
+            ...(userDescription && { userDescription }) // Optional user input
+        };
+
+        const result = await makeApiRequest('/library', 'POST', payload, true);
+
+        if (result) {
+            displayStatus(`"${title}" added to library!`);
+            closeAddItemModal();
+            fetchLibrary(); // Refresh library view
+        } else {
+             // makeApiRequest should have displayed the error status,
+             // but we can add a specific message in the modal too.
+             const errorMessage = statusMessage.textContent.replace('Status: Error: ', ''); // Get error from global status
+             modalError.textContent = `Failed to add item: ${errorMessage}`;
+             modalError.classList.remove('hidden');
+        }
+    }
+
+    // Modal listeners
+    modalCloseBtn.addEventListener('click', closeAddItemModal);
+    modalCancelBtn.addEventListener('click', closeAddItemModal);
+    addItemForm.addEventListener('submit', handleAddItemSubmit);
+    // Close modal if overlay is clicked
+    addItemModal.addEventListener('click', (event) => {
+        if (event.target === addItemModal) { // Check if click is on the overlay itself
+            closeAddItemModal();
+        }
+    });
 
     // --- Attach Event Listeners ---
     logoutBtn.addEventListener('click', handleLogout);
@@ -395,6 +543,12 @@ document.addEventListener('DOMContentLoaded', () => {
     resultsArea.addEventListener('click', handleEditLibraryItem);
     resultsArea.addEventListener('click', handleDeleteLibraryItem);
 
+    // Update event delegation for opening the modal
+    resultsArea.removeEventListener('click', handleAddToLibrary); // Remove old prompt handler
+    resultsArea.addEventListener('click', handleOpenModalClick); // Add new modal handler
+    resultsArea.addEventListener('click', handleEditLibraryItem); // Keep edit handler
+    resultsArea.addEventListener('click', handleDeleteLibraryItem); // Keep delete handler
+    
 
     // --- Initial Load ---
     updateLoginStatus();
