@@ -1,0 +1,66 @@
+.btn {
+    display: inline-block;
+    padding: var(--space-sm) var(--space-lg);
+    border: var(--border-width) solid transparent; /* Base border */
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    text-align: center;
+    transition: var(--transition-base);
+    line-height: 1.2; /* Adjust for button height */
+}
+
+.btn:focus-visible { /* Modern focus outline */
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.btn:active {
+    transform: scale(0.98); /* Subtle click effect */
+}
+
+/* Primary Button */
+.btn-primary {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    border-color: var(--color-primary);
+}
+.btn-primary:hover {
+    background-color: var(--color-primary-dark);
+    border-color: var(--color-primary-dark);
+    color: var(--color-text-inverse); /* Ensure hover color remains */
+    text-decoration: none;
+}
+
+/* Secondary Button */
+.btn-secondary {
+    background-color: var(--color-secondary);
+    color: var(--color-text-light);
+    border-color: var(--color-secondary);
+}
+.btn-secondary:hover {
+    background-color: var(--color-secondary-dark);
+    border-color: var(--color-secondary-dark);
+    color: var(--color-text);
+    text-decoration: none;
+}
+
+/* Danger Button */
+.btn-danger {
+    background-color: var(--color-danger);
+    color: var(--color-text-inverse);
+    border-color: var(--color-danger);
+}
+.btn-danger:hover {
+    background-color: var(--color-danger-dark);
+    border-color: var(--color-danger-dark);
+    color: var(--color-text-inverse);
+    text-decoration: none;
+}
+
+/* Small Button Modifier */
+.btn-small {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: var(--font-size-sm);
+}

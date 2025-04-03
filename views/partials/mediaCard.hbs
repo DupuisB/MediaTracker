@@ -1,0 +1,53 @@
+{{! Template used by client-side JS for search results and library items }}
+{{#each items}}
+<div class="{{../cardClass}}">
+    <img src="{{#if imageUrl}}{{imageUrl}}{{else}}/images/placeholder.png{{/if}}" alt="{{title}}" class="card-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+    <div class="card-content">
+        <h3 class="card-title">{{title}}</h3>
+        <p class="card-meta">
+            <span class="tag tag-{{mediaType}}">{{mediaType}}</span>
+            {{#if releaseDate}}<span>Released: {{formatYear releaseDate}}</span>{{/if}}
+            {{#if ../isSearchResult}}
+                {{#if rating}}<span>API Rating: {{rating}}/20</span>{{/if}}
+                {{#if authors}}<span>Author(s): {{join authors ", "}}</span>{{/if}}
+            {{else}}
+                {{! Library item specific meta }}
+                 <span class="tag tag-status-{{classify userStatus}}">Status: <strong>{{userStatus}}</strong></span>
+                 {{#if userRating}}<span>My Rating: {{userRating}}/20</span>{{/if}}
+                <span>Added: {{formatDate addedAt}}</span>
+                {{#if watchedAt}}<span>Completed: {{formatDate watchedAt}}</span>{{/if}}
+            {{/if}}
+        </p>
+        <p class="card-description">
+            {{#if ../isSearchResult}}
+                {{truncate (defaultIfEmpty description apiDescription) 150}}
+            {{else}}
+                <strong>My Notes:</strong> {{#if userDescription}}{{userDescription}}{{else}}None{{/if}}
+            {{/if}}
+        </p>
+        {{#unless ../isSearchResult}}
+             {{#if apiDescription}}
+             <details class="api-desc-details"><summary>Original Description</summary><p>{{apiDescription}}</p></details>
+             {{/if}}
+        {{/unless}}
+
+        <div class="card-actions">
+            {{#if ../isSearchResult}}
+                <button class="btn btn-primary btn-small add-to-library-btn"
+                        data-media-id="{{id}}"
+                        data-media-type="{{mediaType}}"
+                        data-title="{{title}}"
+                        data-image-url="{{imageUrl}}"
+                        {{!-- Use 'description' from search result for consistency if available --}}
+                        data-api-description="{{defaultIfEmpty description apiDescription}}"
+                        >Add to Library</button>
+            {{else}}
+                <button class="btn btn-secondary btn-small edit-library-item-btn" data-id="{{id}}">Edit</button>
+                <button class="btn btn-danger btn-small delete-library-item-btn" data-id="{{id}}">Delete</button>
+            {{/if}}
+        </div>
+    </div>
+</div>
+{{else}}
+    <p class="placeholder-text">{{../placeholder}}</p>
+{{/each}}

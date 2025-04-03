@@ -1,0 +1,28 @@
+<div id="libraryControls" class="library-controls">
+    <button id="getLibraryBtn" class="btn btn-secondary btn-small" title="Refresh Library">🔄</button>
+    <div class="filters">
+        <span class="filter-label sr-only">Filter by:</span>
+        <select id="filterMediaType" title="Filter by Type">
+            <option value="">All Types</option>
+            <option value="movie">Movie</option>
+            <option value="series">Series</option>
+            <option value="book">Book</option>
+            <option value="video game">Video Game</option>
+        </select>
+        <select id="filterStatus" title="Filter by Status">
+            <option value="">All Statuses</option>
+            <option value="to watch">To Watch</option>
+            <option value="watching">Watching</option>
+            <option value="watched">Watched</option>
+            <option value="to read">To Read</option>
+            <option value="reading">Reading</option>
+            <option value="read">Read</option>
+             <option value="to play">To Play</option>
+            <option value="playing">Playing</option>
+            <option value="played">Played</option>
+        </select>
+        <input type="number" id="filterMinRating" min="1" max="20" placeholder="Min Rate" title="Minimum User Rating">
+        <input type="number" id="filterMaxRating" min="1" max="20" placeholder="Max Rate" title="Maximum User Rating">
+    </div>
+     <div id="librarySpinner" class="spinner hidden"></div>
+</div>

@@ -1,0 +1,51 @@
+body {
+    font-family: var(--font-family-base);
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    background-color: var(--color-bg);
+    line-height: 1.6;
+    padding-bottom: 60px; /* Space for potential fixed footer */
+}
+
+a {
+    color: var(--color-text-link);
+    transition: var(--transition-base);
+}
+
+a:hover {
+    color: var(--color-primary-dark);
+    text-decoration: underline;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin-bottom: var(--space-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+
+p {
+    margin-bottom: var(--space-md);
+}
+
+/* Main content wrapper */
+main {
+    margin-top: var(--space-xl);
+    margin-bottom: var(--space-xl);
+}
+
+/* Basic status/error/success message styles */
+.error-message {
+    color: var(--color-danger);
+    font-weight: var(--font-weight-medium);
+    margin-bottom: var(--space-md);
+}
+.success-message {
+    color: var(--color-success);
+    font-weight: var(--font-weight-medium);
+    margin-bottom: var(--space-md);
+}

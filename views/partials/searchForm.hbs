@@ -1,0 +1,18 @@
+<form id="searchForm" class="search-form">
+     <h3><span class="icon">🔍</span> Search Media</h3>
+    <div class="form-group">
+        <label for="searchQuery" class="sr-only">Search Term:</label>
+        <input type="text" id="searchQuery" required placeholder="Search movies, series, books, games..."> 
+    </div>
+    <div class="form-group">
+        <label for="searchType" class="sr-only">Media Type:</label>
+        <select id="searchType">
+            <option value="movie">Movie</option>
+            <option value="series">Series</option>
+            <option value="book">Book</option>
+            <option value="video game">Video Game</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Search</button>
+</form>
+ <div id="searchSpinner" class="spinner hidden"></div>

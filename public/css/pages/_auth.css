@@ -1,0 +1,24 @@
+.auth-page {
+    max-width: 800px;
+    margin: var(--space-xl) auto;
+}
+
+.auth-forms-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xl); /* Gap between login/register */
+}
+
+.auth-form {
+    flex: 1; /* Each form tries to take equal space */
+    min-width: 280px; /* Minimum width before stacking */
+    padding: var(--space-md);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--border-radius-sm);
+}
+
+.auth-form h3 {
+    margin-top: 0;
+    margin-bottom: var(--space-lg);
+    text-align: center;
+}

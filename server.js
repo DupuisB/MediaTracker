@@ -1,60 +1,105 @@
-require('dotenv').config(); // Load environment variables from .env file first
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path'); // Import path module
-const db = require('./database'); // Import to ensure connection is established & tables created
-const authRoutes = require('./routes/authRoutes');
-const searchRoutes = require('./routes/searchRoutes');
-const libraryRoutes = require('./routes/libraryRoutes');
+const path = require('path');
+const cookieParser = require('cookie-parser'); // Import cookie-parser
+const { engine } = require('express-handlebars'); // Import handlebars engine
+
+const db = require('./database'); // Ensure DB connection
+
+// --- Middleware for Auth Status (used by view routes) ---
+const { checkAuthStatus } = require('./auth'); // We'll add this function to auth.js
+
+// --- Route Imports ---
+const authApiRoutes = require('./routes/api/authRoutes');
+const searchApiRoutes = require('./routes/api/searchRoutes');
+const libraryApiRoutes = require('./routes/api/libraryRoutes');
+const viewRoutes = require('./routes/viewRoutes'); // Import view routes
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// --- Middleware ---
-app.use(cors()); // Enable Cross-Origin Resource Sharing for all routes
-app.use(express.json()); // Parse JSON request bodies
+// --- Handlebars Engine Setup ---
+app.engine('hbs', engine({
+    extname: '.hbs', // Use .hbs extension
+    defaultLayout: 'main', // Specify main.hbs as the default layout
+    layoutsDir: path.join(__dirname, 'views/layouts'), // Layouts directory
+    partialsDir: path.join(__dirname, 'views/partials'), // Partials directory
+    // Optional: Add helpers here if needed
+    helpers: {
+        eq: (v1, v2) => v1 === v2,
+        json: (context) => JSON.stringify(context), // For debugging in templates
+    }
+}));
+app.set('view engine', 'hbs');
+app.set('views', path.join(__dirname, 'views')); // Views directory
 
-// --- Serve Static files ---
-// Serve files from the 'public' directory
-app.use(express.static(path.join(__dirname, 'public')));
+// --- Core Middleware ---
+app.use(cors({ // Configure CORS if your API might be called from other origins
+    origin: `http://localhost:${PORT}`, // Allow requests from frontend origin
+    credentials: true // Allow cookies to be sent
+}));
+app.use(express.json()); // Parse JSON request bodies
+app.use(express.urlencoded({ extended: false })); // Parse URL-encoded bodies (for forms if any)
+app.use(cookieParser()); // Parse cookies
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files
+
+// --- Middleware to make auth status available to ALL views ---
+app.use(checkAuthStatus); // Run checkAuthStatus on every request
+
+// --- View Routes ---
+app.use('/', viewRoutes); // Use view routes for page rendering
 
 // --- API Routes ---
-// API routes should come AFTER static serving middleware
-app.use('/api/auth', authRoutes);
-app.use('/api/search', searchRoutes);
-app.use('/api/library', libraryRoutes); // Library routes are protected within the router file
+// Note: API routes might not need CORS if only called from the same origin,
+// but it's safer to leave it enabled globally or configure specifically.
+app.use('/api/auth', authApiRoutes);
+app.use('/api/search', searchApiRoutes);
+app.use('/api/library', libraryApiRoutes);
 
-// --- Route for serving the main application (optional, static middleware handles '/') ---
-// If you want requests to the root path '/' to explicitly serve index.html
-// (express.static usually does this automatically if index.html exists)
-// You might uncomment this if you have specific needs or routing conflicts later.
-// app.get('/', (req, res) => {
-//     res.sendFile(path.join(__dirname, 'public', 'index.html'));
-// });
-
-
-// --- Basic Error Handling ---
-// Not Found handler for API routes (won't catch static file misses handled by express.static)
-// This needs to be placed carefully. If placed before API routes, it might catch them.
-// Let's refine this: Only apply 404 for routes starting with /api that aren't matched.
-app.use('/api/*', (req, res, next) => {
-     res.status(404).json({ message: 'API endpoint not found.' });
+// --- Error Handling ---
+// API 404 Handler
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ message: 'API endpoint not found.' });
 });
+
+// General 404 Handler for views (after all other routes)
+app.use((req, res) => {
+     res.status(404).render('error', { // Assuming you create an error.hbs view
+        layout: 'main', // Use the main layout
+        pageTitle: 'Not Found',
+        errorCode: 404,
+        errorMessage: 'Sorry, the page you are looking for does not exist.',
+        user: res.locals.user // Pass user status
+     });
+});
+
 
 // General error handler (should be last)
 app.use((err, req, res, next) => {
-    console.error("Unhandled error:", err); // Log the error for debugging
-    res.status(err.status || 500).json({
-        message: err.message || 'An unexpected server error occurred.'
-    });
+    console.error("Unhandled error:", err.stack); // Log stack trace
+     const status = err.status || 500;
+     const message = err.message || 'An unexpected server error occurred.';
+
+    // Respond differently for API requests vs View requests
+    if (req.originalUrl.startsWith('/api/')) {
+         res.status(status).json({ message: message });
+    } else {
+        res.status(status).render('error', { // Render an error page
+            layout: 'main',
+            pageTitle: 'Error',
+            errorCode: status,
+            errorMessage: message,
+            // In production, you might hide the detailed error message
+            // errorMessage: status === 500 ? 'An internal server error occurred.' : message,
+            user: res.locals.user
+        });
+    }
 });
 
-
-// --- Start the Server ---
+// --- Start Server ---
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-    console.log(`Frontend served at http://localhost:${PORT}`);
-    // Note: Database connection is initiated in database.js
+    console.log(`Server running on http://localhost:${PORT}`);
 });
 
 // Graceful shutdown

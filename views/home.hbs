@@ -1,0 +1,18 @@
+<section class="hero">
+    <h2>Organize Your Entertainment</h2>
+    <p>Keep track of movies, series, books, and video games you want to watch, read, or play.</p>
+    {{#if user}}
+        <a href="/library" class="btn btn-primary">Go to My Library</a>
+    {{else}}
+        <a href="/login" class="btn btn-primary">Get Started</a>
+    {{/if}}
+</section>
+
+<section class="features">
+    <h2>Features</h2>
+    <div class="feature-list">
+        <div class="feature-item">Icon 1: Search across multiple platforms.</div>
+        <div class="feature-item">Icon 2: Add items to your personal library.</div>
+        <div class="feature-item">Icon 3: Track your progress and ratings.</div>
+    </div>
+</section>

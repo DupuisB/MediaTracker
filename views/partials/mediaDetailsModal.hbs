@@ -1,0 +1,52 @@
+{{! views/partials/mediaDetailsModal.hbs }}
+<button id="modalCloseBtn" class="modal-close-btn" aria-label="Close">×</button>
+
+<div class="media-details-modal">
+    <div class="details-header">
+        <img src="{{#if item.imageUrl}}{{item.imageUrl}}{{else}}/images/placeholder.png{{/if}}" alt="{{item.title}}" class="details-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+        <div class="details-header-info">
+            <h2>{{item.title}}</h2>
+            <p class="details-meta">
+                <span class="tag tag-{{item.mediaType}}">{{item.mediaType}}</span>
+                 {{#if item.releaseDate}}<span>Released: {{formatYear item.releaseDate}}</span>{{/if}}
+                 {{#if item.authors}}<span>Author(s): {{join item.authors ", "}}</span>{{/if}}
+                 {{!-- API Rating (only if available from search/stored) --}}
+                 {{#if item.rating}}<span>API Rating: {{item.rating}}/20</span>{{/if}}
+            </p>
+        </div>
+    </div>
+
+    <div class="details-body">
+        <h3>Original Description</h3>
+        <p>{{#if item.apiDescription}}{{item.apiDescription}}{{else}}No description available.{{/if}}</p>
+
+        {{#if isLibraryItem}}
+            <hr>
+            <h3>My Library Info</h3>
+            <p class="details-meta">
+                <span class="tag tag-status-{{classify item.userStatus}}">Status: <strong>{{item.userStatus}}</strong></span>
+                {{#if item.userRating}}<span>My Rating: {{item.userRating}}/20</span>{{/if}}
+                <span>Added: {{formatDate item.addedAt}}</span>
+                {{#if item.watchedAt}}<span>Completed: {{formatDate item.watchedAt}}</span>{{/if}}
+            </p>
+            <h4>My Notes:</h4>
+            <p>{{#if item.userDescription}}{{item.userDescription}}{{else}}No personal notes added.{{/if}}</p>
+        {{/if}}
+    </div>
+
+    <div class="modal-actions details-actions">
+        {{#if isLibraryItem}}
+            <button class="btn btn-secondary edit-library-item-btn" data-id="{{item.id}}">Edit</button>
+            <button class="btn btn-danger delete-library-item-btn" data-id="{{item.id}}">Delete</button>
+        {{else}}
+            <button class="btn btn-primary add-to-library-btn"
+                    data-media-id="{{item.id}}"
+                    data-media-type="{{item.mediaType}}"
+                    data-title="{{item.title}}"
+                    data-image-url="{{item.imageUrl}}"
+                    data-api-description="{{item.apiDescription}}"
+                    >Add to Library</button>
+        {{/if}}
+        <button type="button" id="modalCancelBtn" class="btn btn-secondary">Close</button>
+    </div>
+</div>

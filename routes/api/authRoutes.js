@@ -1,6 +1,6 @@
 const express = require('express');
-const db = require('../database'); // Import the database connection
-const { hashPassword, comparePassword, generateToken } = require('../auth'); // Import auth helpers
+const db = require('../../database'); // Import the database connection
+const { hashPassword, comparePassword, setAuthCookie, clearAuthCookie } = require('../../auth');
 
 const router = express.Router();
 
@@ -81,21 +81,25 @@ router.post('/login', (req, res) => {
             }
 
             // Passwords match - Generate JWT
-            const token = generateToken({ id: user.id, username: user.username });
+            setAuthCookie(res, { id: user.id, username: user.username });
 
             res.status(200).json({
                 message: 'Login successful.',
-                token: token,
-                user: { // Optionally send back some user info
-                    id: user.id,
-                    username: user.username
-                }
+                user: { id: user.id, username: user.username }
             });
+
         } catch (error) {
             console.error("Error comparing password or generating token:", error);
             res.status(500).json({ message: 'Server error during login process.' });
         }
     });
 });
+
+// --- Logout ---
+router.post('/logout', (req, res) => {
+    clearAuthCookie(res);
+    res.status(200).json({ message: 'Logout successful.' });
+});
+
 
 module.exports = router;

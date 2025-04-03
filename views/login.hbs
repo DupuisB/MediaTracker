@@ -1,0 +1,18 @@
+<section class="auth-page card">
+    <h2>Login or Register</h2>
+    {{#if loginError}}
+        <p class="error-message">{{loginError}}</p>
+    {{/if}}
+     {{#if registerMessage}}
+        <p class="success-message">{{registerMessage}}</p>
+    {{/if}}
+
+    <div class="auth-forms-container">
+        <div class="auth-form">
+            {{> loginForm }}
+        </div>
+        <div class="auth-form">
+             {{> registerForm }}
+        </div>
+    </div>
+</section>

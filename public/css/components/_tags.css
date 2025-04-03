@@ -1,0 +1,32 @@
+.tag {
+    display: inline-block;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.75rem; /* Smaller font */
+    font-weight: var(--font-weight-semibold);
+    border-radius: var(--border-radius-sm);
+    line-height: 1;
+    text-transform: capitalize;
+}
+
+/* Base tag colors (can be overridden) */
+.tag {
+    background-color: var(--color-secondary);
+    color: var(--color-text-light);
+}
+
+/* Type specific tags */
+.tag-movie { background-color: #e6f7ff; color: #096dd9; border: 1px solid #91d5ff;}
+.tag-series { background-color: #fffbe6; color: #d48806; border: 1px solid #ffe58f;}
+.tag-book { background-color: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f;}
+.tag-video-game { background-color: #fff0f6; color: #c41d7f; border: 1px solid #ffadd2;}
+
+/* Status specific tags */
+.tag-status-to-watch, .tag-status-to-read, .tag-status-to-play {
+    background-color: var(--color-secondary-dark); color: var(--color-text);
+}
+.tag-status-watching, .tag-status-reading, .tag-status-playing {
+    background-color: #fff1b8; color: #d46b08; border: 1px solid #ffd591; /* Orange/Yellow */
+}
+.tag-status-watched, .tag-status-read, .tag-status-played {
+    background-color: #e6fffb; color: #08979c; border: 1px solid #87e8de; /* Teal/Green */
+}

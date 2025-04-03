@@ -1,0 +1,14 @@
+footer {
+    margin-top: var(--space-xxl);
+    padding: var(--space-lg) 0;
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-lighter);
+    border-top: var(--border-width) solid var(--color-border);
+    /* Uncomment for sticky footer: */
+    /* position: fixed; */
+    /* bottom: 0; */
+    /* left: 0; */
+    /* width: 100%; */
+    /* background-color: var(--color-bg); */
+}
