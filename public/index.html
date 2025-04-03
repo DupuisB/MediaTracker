@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Watchlist</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>My Media Watchlist</h1>
+        <div id="authStatus" class="auth-status">
+            <span>Loading...</span>
+            <button id="logoutBtn" class="btn btn-secondary hidden">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Authentication Section -->
+        <section id="authSection" class="card auth-forms">
+            <h2>Login / Register</h2>
+            <div class="form-container">
+                <form id="loginForm">
+                    <h3>Login</h3>
+                    <div class="form-group">
+                        <label for="loginUsername">Username:</label>
+                        <input type="text" id="loginUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+                <hr class="form-divider">
+                <form id="registerForm">
+                    <h3>Register</h3>
+                    <div class="form-group">
+                        <label for="regUsername">Username:</label>
+                        <input type="text" id="regUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Password:</label>
+                        <input type="password" id="regPassword" minlength="6" required>
+                    </div>
+                    <button type="submit" class="btn btn-secondary">Register</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Logged In Content Area -->
+        <section id="loggedInContent" class="hidden">
+
+            <!-- Search Section -->
+            <section class="card">
+                <h2><span class="icon">🔍</span> Search Media</h2>
+                <form id="searchForm" class="search-form">
+                    <div class="form-group">
+                        <label for="searchQuery">Search Term:</label>
+                        <input type="text" id="searchQuery" required placeholder="e.g., Dune, The Last of Us, Mistborn...">
+                    </div>
+                    <div class="form-group">
+                        <label for="searchType">Media Type:</label>
+                        <select id="searchType">
+                            <option value="movie">Movie</option>
+                            <option value="series">Series</option>
+                            <option value="book">Book</option>
+                            <option value="video game">Video Game</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </form>
+            </section>
+
+            <!-- Library Controls -->
+             <section class="card">
+                 <h2><span class="icon">📚</span> My Library</h2>
+                 <div id="libraryControls" class="library-controls">
+                     <button id="getLibraryBtn" class="btn btn-secondary">Refresh Library</button>
+                     <div class="filters">
+                         <span class="filter-label">Filter by:</span>
+                         <select id="filterMediaType" title="Filter by Type">
+                             <option value="">-- Type --</option>
+                             <option value="movie">Movie</option>
+                             <option value="series">Series</option>
+                             <option value="book">Book</option>
+                             <option value="video game">Video Game</option>
+                         </select>
+                         <select id="filterStatus" title="Filter by Status">
+                             <option value="">-- Status --</option>
+                             <option value="to watch">To Watch</option>
+                             <option value="watching">Watching</option>
+                             <option value="watched">Watched</option>
+                             <option value="to read">To Read</option>
+                             <option value="reading">Reading</option>
+                             <option value="read">Read</option>
+                             <option value="to play">To Play</option>
+                             <option value="playing">Playing</option>
+                             <option value="played">Played</option>
+                         </select>
+                         <input type="number" id="filterMinRating" min="1" max="20" placeholder="Min Rate" title="Minimum User Rating">
+                         <input type="number" id="filterMaxRating" min="1" max="20" placeholder="Max Rate" title="Maximum User Rating">
+                     </div>
+                 </div>
+            </section>
+
+            <!-- Results Area (for Search and Library) -->
+            <section id="resultsArea" class="results-grid">
+                <!-- Dynamic content goes here -->
+                <p class="placeholder-text">Search for media or view your library.</p>
+            </section>
+
+        </section> <!-- End loggedInContent -->
+
+        <!-- Status/Response Area -->
+        <section id="statusSection" class="status-section">
+             <p id="statusMessage">Status: Idle</p>
+             <details>
+                 <summary>Show Last API Response</summary>
+                 <pre id="responseArea">---</pre>
+             </details>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>Watchlist App © 2024</p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

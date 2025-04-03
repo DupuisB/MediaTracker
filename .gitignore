@@ -1,0 +1,91 @@
+# --- Node & Dependencies ---
+# Ignore node_modules directory, generated during `npm install`
+/node_modules
+
+# Ignore package lock files if you are not using them consistently
+# (Usually recommended TO commit package-lock.json or yarn.lock)
+# package-lock.json
+# yarn.lock
+
+# Ignore npm debug and error logs
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+
+# --- Environment Variables ---
+# Ignore environment variables file - DO NOT COMMIT SECRETS!
+.env
+.env.*
+!.env.example # Make sure an example file can be committed
+
+# --- SQLite Database ---
+# Ignore the local SQLite database file
+watchlist.db
+*.sqlite
+*.sqlite3
+# Ignore database journal files (temporary)
+*.db-journal
+*.sqlite-journal
+*.sqlite3-journal
+*.db-shm
+*.sqlite-shm
+*.sqlite3-shm
+*.db-wal
+*.sqlite-wal
+*.sqlite3-wal
+
+# --- Logs ---
+# Ignore log files and directories
+logs
+*.log
+
+# --- Runtime Data ---
+# Ignore process ID files, session files, etc.
+*.pid
+*.seed
+*.pid.lock
+
+# --- Build Output (Optional, good practice) ---
+# If you ever add a build step (e.g., TypeScript)
+/dist
+/build
+/out
+/.next # If using Next.js for frontend later
+
+# --- Test Coverage ---
+# If you add testing with coverage reports
+/coverage
+.nyc_output
+
+# --- OS generated files ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Editor directories and files ---
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*~
+
+# Other
+.idea/ # JetBrains IDEs
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
