@@ -1,0 +1,122 @@
+{{! views/userProfile.hbs }}
+<div class="profile-page container">
+    <section class="profile-header card">
+        <div class="profile-banner"> {{!-- Placeholder banner --}} </div>
+        <div class="profile-info">
+            <img src="{{defaultIfEmpty profile.profileImageUrl '/images/placeholder_avatar.png'}}" alt="{{profile.username}}'s Profile Picture" class="profile-picture" onerror="this.onerror=null; this.src='/images/placeholder_avatar.png';">
+            <div class="profile-details">
+                <h2>{{profile.username}}</h2>
+                <p class="member-since">Member since {{formatDate profile.memberSince}}</p>
+                <div class="profile-privacy">
+                     {{#if isOwnProfile}}
+                        <form id="privacyForm">
+                            <label for="privacyToggle">Profile:</label>
+                            <select id="privacyToggle" name="profilePrivacy">
+                                <option value="private" {{#eq profile.profilePrivacy 'private'}}selected{{/eq}}>Private</option>
+                                <option value="public" {{#eq profile.profilePrivacy 'public'}}selected{{/eq}}>Public</option>
+                            </select>
+                             <button type="submit" class="btn btn-secondary btn-small">Save</button>
+                             <span id="privacyStatus" class="status-message"></span>
+                        </form>
+                    {{else}}
+                        <span>Profile is {{capitalize profile.profilePrivacy}}</span>
+                    {{/if}}
+                 </div>
+            </div>
+            <div class="profile-actions">
+                {{#unless isOwnProfile}}
+                    {{!-- Social Feature: Add Friend Button (Skipped) --}}
+                    {{!-- <button class="btn btn-primary add-friend-btn">Add Friend</button> --}}
+                {{else}}
+                     {{!-- <button class="btn btn-secondary edit-profile-btn">Edit Profile</button> --}}
+                {{/unless}}
+            </div>
+        </div>
+        <div class="profile-stats">
+            <div class="stat-item">
+                <span class="stat-value">{{defaultIfEmpty profile.countMediaCompleted 0}}</span>
+                <span class="stat-label">Media Completed</span>
+            </div>
+             <div class="stat-item">
+                <span class="stat-value">{{defaultIfEmpty profile.averageScore "-"}}</span>
+                <span class="stat-label">Average Score</span>
+            </div>
+             <div class="stat-item">
+                <span class="stat-value">{{defaultIfEmpty profile.countMediaTotal 0}}</span>
+                <span class="stat-label">Items Tracked</span>
+            </div>
+            {{!-- Add more stats here if available --}}
+        </div>
+    </section>
+
+    {{!-- Last Seen Section --}}
+    <section class="media-carousel-section container">
+        <h2 class="section-title">Recently Completed</h2>
+         {{#if lastSeen.length}}
+         <div class="swiper media-swiper">
+            <div class="swiper-wrapper">
+                {{#each lastSeen}}
+                <div class="swiper-slide">
+                    {{> mediaCard items=(list this) }}
+                 </div>
+                {{/each}}
+            </div>
+             <div class="swiper-button-prev"></div>
+             <div class="swiper-button-next"></div>
+        </div>
+        {{else}}
+        <p class="placeholder-text">No recently completed items.</p>
+        {{/if}}
+    </section>
+
+    {{!-- Favorites Section --}}
+    <section class="media-carousel-section container">
+        <h2 class="section-title">⭐ Favorites</h2>
+         {{#if favorites.length}}
+         <div class="swiper media-swiper">
+            <div class="swiper-wrapper">
+                {{#each favorites}}
+                <div class="swiper-slide">
+                    {{> mediaCard items=(list this) }}
+                </div>
+                {{/each}}
+            </div>
+            <div class="swiper-button-prev"></div>
+            <div class="swiper-button-next"></div>
+        </div>
+        {{else}}
+        <p class="placeholder-text">No favorite items marked yet.</p>
+        {{/if}}
+    </section>
+
+    {{!-- Public Lists Section --}}
+    <section class="media-carousel-section container">
+        <h2 class="section-title">Public Lists</h2>
+         {{#if publicLists.length}}
+          <div class="swiper list-swiper"> {{!-- Potentially use a different card for lists --}}
+            <div class="swiper-wrapper">
+                 {{#each publicLists}}
+                 <div class="swiper-slide">
+                     {{!-- Render List Summary Card (Need a partial 'listCard' or adapt 'listSummaryRow') --}}
+                      <div class="list-card">
+                          <a href="/lists/{{this.id}}">
+                             <img src="{{defaultIfEmpty this.coverImageUrl '/images/placeholder_list.png'}}" alt="{{this.title}} Cover" class="list-card-image" onerror="this.onerror=null; this.src='/images/placeholder_list.png';">
+                             <div class="list-card-info">
+                                 <h3 class="list-card-title">{{truncate this.title 40}}</h3>
+                                 <p>{{this.itemCount}} items</p>
+                             </div>
+                          </a>
+                      </div>
+                  </div>
+                 {{/each}}
+            </div>
+             <div class="swiper-button-prev"></div>
+             <div class="swiper-button-next"></div>
+        </div>
+        <p><a href="/lists?userId={{profile.id}}">View all lists...</a></p> {{!-- Link to full list overview --}}
+        {{else}}
+        <p class="placeholder-text">{{#if isOwnProfile}}You haven't created any public lists.{{else}}This user has no public lists.{{/if}}</p>
+        {{/if}}
+    </section>
+
+</div>

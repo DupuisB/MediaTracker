@@ -9,21 +9,27 @@
 @import url('layout/_container.css');
 @import url('layout/_header.css');
 @import url('layout/_footer.css');
-@import url('layout/_grid.css'); /* Specific grid layout */
+/* @import url('layout/_grid.css'); /* If general grid styles are needed */
 
 /* 3. Component Styles */
 @import url('components/_buttons.css');
-@import url('components/_card.css');
+@import url('components/_card.css');      /* Media card, List card */
 @import url('components/_forms.css');
 @import url('components/_modal.css');
-@import url('components/_navigation.css');
-@import url('components/_tags.css');
+@import url('components/_navigation.css'); /* Horizontal Nav */
 @import url('components/_spinner.css');
+@import url('components/_tags.css');
+@import url('components/_swiper.css');    /* Swiper carousel styles */
+@import url('components/_userInteraction.css'); /* Detail page controls */
+@import url('components/_listRow.css');   /* List summary and item rows */
 
 /* 4. Page-Specific Styles */
 @import url('pages/_home.css');
 @import url('pages/_auth.css');
-@import url('pages/_library.css');
+@import url('pages/_mediaDetail.css');
+@import url('pages/_searchResults.css');
+@import url('pages/_userProfile.css');
+@import url('pages/_lists.css');          /* Covers overview and detail */
 
 /* 5. Utility Styles */
 @import url('utils/_helpers.css');

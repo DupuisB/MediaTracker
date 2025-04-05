@@ -2,7 +2,7 @@
 const express = require('express');
 const axios = require('axios');
 require('dotenv').config();
-const { getIgdbHeaders } = require('./igdbAuthHelper');
+const { getIgdbHeaders, convertRatingTo10 } = require('./igdbAuthHelper'); // Use correct helper
 
 const router = express.Router();
 
@@ -15,13 +15,12 @@ const IGDB_BASE_URL = 'https://api.igdb.com/v4';
 // Helper to fetch data safely
 const fetchData = async (url, config = {}) => {
     try {
+        // console.log("Fetching:", url);
         const response = await axios.get(url, config);
         return response.data;
     } catch (error) {
-        console.error(`API fetch error for ${url}: ${error.response?.status || error.message}`);
-        // Return specific error info if possible
-        const errorData = { failed: true, status: error.response?.status, message: error.message };
-        return errorData;
+        console.error(`API fetch error for ${url}: ${error.response?.status || error.message}`, error.response?.data);
+        return { failed: true, status: error.response?.status, message: error.message, data: error.response?.data };
     }
 };
 
@@ -29,105 +28,110 @@ const fetchData = async (url, config = {}) => {
 const fetchIgdbData = async (endpoint, body) => {
     let headers;
     try {
-        headers = await getIgdbHeaders(); // Get auth headers
+        headers = await getIgdbHeaders();
     } catch(authError) {
-        console.error("IGDB Auth Error during header retrieval:", authError.message);
-         // Return structure indicating auth failure
+        console.error("IGDB Auth Error:", authError.message);
          return { failed: true, authFailed: true, message: `IGDB Auth Error: ${authError.message}` };
     }
-
     try {
+        // console.log("Fetching IGDB:", endpoint, "Body:", body);
         const response = await axios.post(`${IGDB_BASE_URL}${endpoint}`, body, {
             headers: { ...headers, 'Content-Type': 'text/plain' }
          });
-         // Check if IGDB returned an empty array or valid data
-        return response.data && response.data.length > 0 ? response.data[0] : { notFound: true }; // Expecting one result by ID
+        return response.data && response.data.length > 0 ? response.data[0] : { notFound: true };
     } catch (error) {
-        console.error(`IGDB fetch error for ${endpoint}: ${error.response?.status || error.message}`);
-         return { failed: true, status: error.response?.status, message: error.message };
+        console.error(`IGDB fetch error for ${endpoint}: ${error.response?.status || error.message}`, error.response?.data);
+         return { failed: true, status: error.response?.status, message: error.message, data: error.response?.data };
+    }
+};
+
+// Helper to safely extract year
+const getYear = (dateString) => {
+    if (!dateString) return null;
+    try {
+        return new Date(dateString).getFullYear();
+    } catch (e) {
+        const yearMatch = dateString.match(/\d{4}/); // Try matching YYYY
+        return yearMatch ? parseInt(yearMatch[0], 10) : null;
     }
 };
 
 
-// Convert various ratings to a 0-20 scale (approx)
-function normalizeRating(rating, scale) {
-    if (rating === null || rating === undefined || isNaN(parseFloat(rating))) {
-        return null;
-    }
-    const numRating = parseFloat(rating);
-    switch (scale) {
-        case 10: // TMDB (0-10)
-            return (numRating * 2).toFixed(1);
-        case 5: // Google Books (0-5)
-            return (numRating * 4).toFixed(1);
-        case 100: // IGDB (0-100)
-            return (numRating / 5).toFixed(1);
-        default:
-            return rating; // Assume already correct scale or unknown
-    }
-}
-
+// GET /api/details/:mediaType/:mediaId
 router.get('/:mediaType/:mediaId', async (req, res) => {
     const { mediaType, mediaId } = req.params;
-    let combinedDetails = { // Initialize with base info
-        mediaType: mediaType,
-        mediaId: mediaId, // The external ID
-        title: null,
-        description: null,
-        imageUrl: null,
-        releaseDate: null,
-        rating: null, // Normalized rating
-        genres: [],
-        // Type specific fields
-        authors: [], // books
-        publisher: null, // books
-        pageCount: null, // books
-        googleBooksLink: null, // books
-        cast: [], // movies/series
-        producers: [], // movies/series
-        imdbId: null, // movies/series
-        platforms: [], // games
-        developers: [], // games
-        publishers: [], // games
-        screenshots: [], // games
-        videos: [], // games
-        igdbLink: null, // games
-    };
     let apiResponseData;
 
+    // Initialize structured details object
+    let combinedDetails = {
+        mediaId: mediaId,
+        mediaType: mediaType,
+        title: null,
+        subtitle: null, // e.g., tagline for movies, author/year for books
+        description: null,
+        imageUrl: null, // Larger image for detail view
+        releaseDate: null, // Full date where available
+        releaseYear: null,
+        apiRating: null, // Normalized 1-10 rating from API
+        genres: [],
+        // Specific fields
+        authors: [], // books
+        directors: [], // movies/series (TMDB: Crew job 'Director')
+        screenwriters: [], // movies/series (TMDB: Crew job 'Screenplay', 'Writer')
+        publisher: null, // books, games
+        pageCount: null, // books
+        cast: [], // movies/series (TMDB: Cast), games (IGDB: involved_companies?) - simplified for now
+        platforms: [], // games (IGDB: platforms.name)
+        developers: [], // games (IGDB: involved_companies where developer=true)
+        // Links
+        imdbId: null, // movies/series
+        googleBooksLink: null, // books
+        igdbLink: null, // games
+        tmdbLink: null, // movies/series
+        // Placeholders for related/reviews - not fetched here
+        relatedMedia: [],
+        reviews: []
+    };
+
     try {
-        // --- Fetch Data based on Type ---
         switch (mediaType) {
             case 'movie':
             case 'series':
                 if (!TMDB_API_KEY) throw new Error('TMDB API Key missing.');
-                const basePath = mediaType === 'movie' ? 'movie' : 'tv';
-                const detailsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}?api_key=${TMDB_API_KEY}&language=en-US`;
-                const creditsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}/credits?api_key=${TMDB_API_KEY}&language=en-US`;
-                const externalIdsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}/external_ids?api_key=${TMDB_API_KEY}`;
+                const isMovie = mediaType === 'movie';
+                const basePath = isMovie ? 'movie' : 'tv';
+                const detailsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}?api_key=${TMDB_API_KEY}&language=en-US&append_to_response=credits,external_ids`;
 
-                const [detailsData, creditsData, externalIdsData] = await Promise.all([
-                    fetchData(detailsUrl),
-                    fetchData(creditsUrl),
-                    fetchData(externalIdsUrl)
-                ]);
+                apiResponseData = await fetchData(detailsUrl);
 
-                 // Check for critical failures
-                 if (detailsData?.failed || !detailsData) {
-                     const status = detailsData?.status || 404;
-                     return res.status(status).json({ message: `Details not found on TMDB (${status}).` });
+                 if (apiResponseData?.failed || !apiResponseData) {
+                     const status = apiResponseData?.status || 404;
+                     const message = apiResponseData?.data?.status_message || `Details not found on TMDB (${status}).`;
+                     return res.status(status).json({ message });
                  }
 
-                // Populate combinedDetails
-                combinedDetails.title = mediaType === 'movie' ? detailsData.title : detailsData.name;
-                combinedDetails.description = detailsData.overview;
-                combinedDetails.imageUrl = detailsData.poster_path ? `https://image.tmdb.org/t/p/w500${detailsData.poster_path}` : null;
-                combinedDetails.releaseDate = mediaType === 'movie' ? detailsData.release_date : detailsData.first_air_date;
-                combinedDetails.rating = normalizeRating(detailsData.vote_average, 10);
-                combinedDetails.genres = detailsData.genres?.map(g => g.name) || [];
-                combinedDetails.cast = creditsData?.cast?.slice(0, 10).map(c => ({ name: c.name, character: c.character })) || [];
-                combinedDetails.producers = creditsData?.crew?.filter(c => c.job === 'Producer').map(p => p.name) || [];
-                combinedDetails.imdbId = externalIdsData?.imdb_id || null;
+                combinedDetails.title = isMovie ? apiResponseData.title : apiResponseData.name;
+                combinedDetails.subtitle = apiResponseData.tagline || null;
+                combinedDetails.description = apiResponseData.overview;
+                combinedDetails.imageUrl = apiResponseData.poster_path ? `https://image.tmdb.org/t/p/w780${apiResponseData.poster_path}` : null; // Larger poster
+                combinedDetails.releaseDate = isMovie ? apiResponseData.release_date : apiResponseData.first_air_date;
+                combinedDetails.releaseYear = getYear(combinedDetails.releaseDate);
+                combinedDetails.apiRating = convertRatingTo10(apiResponseData.vote_average, 'tmdb');
+                combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
+                combinedDetails.imdbId = apiResponseData.external_ids?.imdb_id || null;
+                combinedDetails.tmdbLink = `https://www.themoviedb.org/${basePath}/${mediaId}`;
+
+                 // Process credits
+                if (apiResponseData.credits) {
+                    combinedDetails.cast = apiResponseData.credits.cast?.slice(0, 10).map(c => ({ name: c.name, character: c.character, profilePath: c.profile_path })) || []; // Get profile picture path too
+                    apiResponseData.credits.crew?.forEach(c => {
+                         if (c.job === 'Director') combinedDetails.directors.push(c.name);
+                         if (c.job === 'Screenplay' || c.job === 'Writer' || c.job === 'Story') combinedDetails.screenwriters.push(c.name);
+                    });
+                     // Unique names
+                    combinedDetails.directors = [...new Set(combinedDetails.directors)];
+                    combinedDetails.screenwriters = [...new Set(combinedDetails.screenwriters)];
+                 }
                 break;
 
             case 'book':
@@ -136,15 +140,19 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
 
                 if (apiResponseData?.failed || !apiResponseData?.volumeInfo) {
                     const status = apiResponseData?.status || 404;
-                    return res.status(status).json({ message: `Book details not found on Google Books (${status}).` });
+                     const message = apiResponseData?.error?.message || `Book details not found on Google Books (${status}).`;
+                    return res.status(status).json({ message });
                 }
 
                 const volInfo = apiResponseData.volumeInfo;
                 combinedDetails.title = volInfo.title;
+                combinedDetails.subtitle = volInfo.subtitle || (volInfo.authors ? volInfo.authors.join(', ') : null);
                 combinedDetails.description = volInfo.description;
-                combinedDetails.imageUrl = volInfo.imageLinks?.thumbnail?.replace(/^http:/, 'https') || volInfo.imageLinks?.smallThumbnail?.replace(/^http:/, 'https') || null;
+                // Prefer larger images if available
+                combinedDetails.imageUrl = volInfo.imageLinks?.thumbnail?.replace(/^http:/, 'https').replace(/zoom=\d/, 'zoom=1') || volInfo.imageLinks?.smallThumbnail?.replace(/^http:/, 'https') || null;
                 combinedDetails.releaseDate = volInfo.publishedDate; // Often just year or YYYY-MM
-                combinedDetails.rating = normalizeRating(volInfo.averageRating, 5);
+                combinedDetails.releaseYear = getYear(volInfo.publishedDate);
+                combinedDetails.apiRating = convertRatingTo10(volInfo.averageRating, 'google');
                 combinedDetails.genres = volInfo.categories || [];
                 combinedDetails.authors = volInfo.authors || [];
                 combinedDetails.publisher = volInfo.publisher || null;
@@ -153,69 +161,65 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 break;
 
             case 'video game':
+                 // Fetch more fields for details
                 const gameQuery = `
-                    fields name, summary, genres.name, platforms.abbreviation,
-                           first_release_date, involved_companies.company.name,
-                           involved_companies.developer, involved_companies.publisher,
-                           total_rating, cover.url, screenshots.url, videos.video_id, url;
+                    fields
+                        name, summary, storyline, url,
+                        first_release_date, total_rating,
+                        genres.name, platforms.name, involved_companies.*, involved_companies.company.*,
+                        cover.url, screenshots.url, videos.video_id;
                     where id = ${mediaId};
                     limit 1;`;
                 apiResponseData = await fetchIgdbData('/games', gameQuery);
 
                 if (apiResponseData?.failed || apiResponseData?.notFound) {
-                    if(apiResponseData?.authFailed) {
-                         return res.status(503).json({ message: apiResponseData.message }); // Auth problem
-                    }
+                    if(apiResponseData?.authFailed) return res.status(503).json({ message: apiResponseData.message });
                     const status = apiResponseData?.status || 404;
-                     return res.status(status).json({ message: `Game details not found on IGDB (${status}).` });
+                    return res.status(status).json({ message: `Game details not found on IGDB (${status}).` });
                 }
 
                 combinedDetails.title = apiResponseData.name;
-                combinedDetails.description = apiResponseData.summary;
+                combinedDetails.description = apiResponseData.summary || apiResponseData.storyline; // Use storyline if summary is missing
                 combinedDetails.imageUrl = apiResponseData.cover?.url
                     ? apiResponseData.cover.url.replace('t_thumb', 't_cover_big').replace(/^\/\//, 'https://')
                     : null;
                 combinedDetails.releaseDate = apiResponseData.first_release_date
-                    ? new Date(apiResponseData.first_release_date * 1000).toISOString().split('T')[0] // Convert timestamp
+                    ? new Date(apiResponseData.first_release_date * 1000).toISOString().split('T')[0]
                     : null;
-                combinedDetails.rating = normalizeRating(apiResponseData.total_rating, 100);
+                combinedDetails.releaseYear = getYear(combinedDetails.releaseDate);
+                combinedDetails.apiRating = convertRatingTo10(apiResponseData.total_rating, 'igdb');
                 combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
-                combinedDetails.platforms = apiResponseData.platforms?.map(p => p.abbreviation || p.name) || []; // Use abbreviation if available
+                combinedDetails.platforms = apiResponseData.platforms?.map(p => p.name) || []; // Get full platform names
                 combinedDetails.igdbLink = apiResponseData.url || null;
-                 // Extract developers and publishers
+
+                // Extract developers and publishers from involved_companies
                 if (apiResponseData.involved_companies) {
                     apiResponseData.involved_companies.forEach(ic => {
                         if (ic.company?.name) {
                             if (ic.developer) combinedDetails.developers.push(ic.company.name);
-                            if (ic.publisher) combinedDetails.publishers.push(ic.company.name);
+                            if (ic.publisher) { // Assuming single publisher for simplicity, often primary
+                                combinedDetails.publisher = combinedDetails.publisher || ic.company.name;
+                            }
                         }
                     });
-                    // Remove duplicates
                     combinedDetails.developers = [...new Set(combinedDetails.developers)];
-                    combinedDetails.publishers = [...new Set(combinedDetails.publishers)];
+                    // Cast could potentially be derived from involved_companies if actor roles were tagged, but IGDB doesn't focus on this. Keep empty.
                 }
-                combinedDetails.screenshots = apiResponseData.screenshots?.map(s => s.url?.replace('t_thumb', 't_screenshot_med').replace(/^\/\//, 'https://')) || [];
-                combinedDetails.videos = apiResponseData.videos?.map(v => ({ youtubeId: v.video_id, youtubeLink: `https://www.youtube.com/watch?v=${v.video_id}` })) || [];
+                // Add screenshots and videos if needed (keep limited for payload size)
+                // combinedDetails.screenshots = apiResponseData.screenshots?.slice(0, 5).map(s => s.url?.replace('t_thumb', 't_screenshot_med').replace(/^\/\//, 'https://')) || [];
+                // combinedDetails.videos = apiResponseData.videos?.slice(0, 3).map(v => ({ youtubeId: v.video_id, youtubeLink: `https://www.youtube.com/watch?v=${v.video_id}` })) || [];
                 break;
 
             default:
                 return res.status(400).json({ message: 'Invalid media type specified.' });
         }
 
-        // Return the aggregated details
         res.status(200).json(combinedDetails);
 
     } catch (error) {
-        // Catch errors from processing logic or initial API key checks etc.
         console.error(`Error processing details for ${mediaType} ${mediaId}:`, error);
         res.status(500).json({ message: error.message || 'Server error while fetching detailed media information.' });
     }
 });
 
 module.exports = router;
-
-// NOTE: You'll need to create/import `igdbAuthHelper.js` containing the
-// getIgdbAccessToken and getIgdbHeaders functions previously defined in
-// searchRoutes.js or refactor them into a shared location. For simplicity,
-// I've assumed it exists here. You can copy the relevant functions from
-// `searchRoutes.js` into a new `igdbAuthHelper.js` file and export them.

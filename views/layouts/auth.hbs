@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{pageTitle}} - MediaTracker</title>
+    {{!-- Link main stylesheet which includes auth page styles --}}
+    <link rel="stylesheet" href="/css/style.css">
+    {{!-- Add specific auth layout class to body for targeting --}}
+    <style>
+        /* Minimal inline style to ensure body takes full height if needed */
+        html, body { height: 100%; margin: 0; padding: 0; }
+        body { display: flex; justify-content: center; align-items: center; }
+    </style>
+</head>
+{{!-- Add class to body for auth page specific styling --}}
+<body class="auth-layout">
+
+    {{{body}}}
+
+    <script src="/js/main.js"></script>
+</body>
+</html>

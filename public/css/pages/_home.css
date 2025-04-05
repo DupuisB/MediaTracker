@@ -1,52 +1,15 @@
-.hero {
-    background-color: var(--color-primary); /* Or use a background image */
-    color: var(--color-text-inverse);
-    padding: var(--space-xxl) var(--space-lg);
-    text-align: center;
-    border-radius: var(--border-radius-md);
+/* public/css/pages/_home.css */
+
+/* Horizontal Navigation (styles in _navigation.css) */
+
+/* Section styling */
+.media-carousel-section {
     margin-bottom: var(--space-xl);
 }
 
-.hero h2 {
-    font-size: 2.5rem;
+.section-title {
+    font-size: var(--font-size-h3);
     margin-bottom: var(--space-sm);
-    color: inherit;
-}
-
-.hero p {
-    font-size: var(--font-size-lg);
-    margin-bottom: var(--space-lg);
-    opacity: 0.9;
-}
-
-.hero .btn-primary {
-    background-color: var(--color-bg-alt);
-    color: var(--color-primary);
-    font-weight: var(--font-weight-bold);
-}
-.hero .btn-primary:hover {
-    background-color: var(--color-secondary);
-}
-
-
-.features {
-    text-align: center;
-    padding: var(--space-xl) 0;
-}
-
-.features h2 {
-    margin-bottom: var(--space-xl);
-}
-
-.feature-list {
-    display: flex;
-    justify-content: space-around;
-    flex-wrap: wrap;
-    gap: var(--space-lg);
-}
-
-.feature-item {
-    flex-basis: 250px; /* Minimum width for feature items */
-    padding: var(--space-md);
-    /* Add icons later */
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-divider);
 }

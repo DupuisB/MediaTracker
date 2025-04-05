@@ -1,0 +1,18 @@
+{{! views/partials/listSummaryRow.hbs }}
+<div class="list-summary-row card" data-list-id="{{list.id}}">
+     {{!-- Checkbox functionality undefined, maybe remove for now --}}
+     {{!-- <input type="checkbox" class="list-checkbox" aria-label="Select list {{list.title}}"> --}}
+    <div class="list-summary-details">
+        <h3><a href="/lists/{{list.id}}">{{list.title}}</a></h3>
+        <p class="list-summary-meta">
+             By <a href="/profile/{{list.ownerUsername}}">{{list.ownerUsername}}</a> | {{list.itemCount}} items | {{#if list.isPublic}}Public{{else}}Private{{/if}}
+        </p>
+        <p class="list-summary-desc">{{truncate list.description 100}}</p>
+    </div>
+     {{#if isOwner}}
+    <div class="list-summary-actions">
+        <button class="btn btn-secondary btn-small edit-list-btn" title="Edit List"><span class="icon">✏️</span></button>
+        <button class="btn btn-danger btn-small delete-list-btn" title="Delete List" data-list-title="{{list.title}}"><span class="icon">🗑️</span></button>
+    </div>
+     {{/if}}
+</div>

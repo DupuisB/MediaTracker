@@ -1,0 +1,66 @@
+{{! views/listDetail.hbs }}
+<div class="list-detail-page container">
+    <section class="list-detail-header card">
+         <div class="list-cover">
+            <img src="{{defaultIfEmpty list.coverImageUrl '/images/placeholder_list.png'}}" alt="{{list.title}} Cover" onerror="this.onerror=null; this.src='/images/placeholder_list.png';">
+         </div>
+         <div class="list-info">
+             <h1>{{list.title}}</h1>
+             <p class="list-owner">Created by <a href="/profile/{{list.ownerUsername}}">{{list.ownerUsername}}</a></p>
+             <p class="list-description">{{defaultIfEmpty list.description "No description provided."}}</p>
+              <div class="list-meta">
+                 <span>{{list.items.length}} items</span>
+                 <span>Status: {{#if list.isPublic}}Public{{else}}Private{{/if}}</span>
+                 <span>Last updated: {{formatDate list.updatedAt}}</span>
+             </div>
+             {{#if isOwner}}
+                 <div class="list-owner-actions">
+                     <button class="btn btn-secondary btn-small edit-list-btn" data-list-id="{{list.id}}">Edit List Details</button>
+                     {{!-- Add Item button could go here or below the table --}}
+                      <button class="btn btn-danger btn-small delete-list-btn" data-list-id="{{list.id}}" data-list-title="{{list.title}}">Delete List</button>
+                 </div>
+             {{/if}}
+         </div>
+    </section>
+
+    <section class="list-items-section card">
+        <h2>Items in this list</h2>
+         {{#if isOwner}}
+             <div class="add-item-to-list">
+                 {{!-- Simple Add Item Form - Could be more complex (search library) --}}
+                 <form id="addToListForm">
+                    <input type="hidden" name="listId" value="{{list.id}}">
+                    <div class="form-group">
+                        <label for="libraryItemIdToAdd">Add Item (Enter Library Item ID):</label>
+                        <input type="number" id="libraryItemIdToAdd" name="libraryItemId" placeholder="Find item in your library first" required>
+                        <small>You need the ID from your main library.</small>
+                    </div>
+                     <div class="form-group">
+                         <label for="itemCommentToAdd">Comment (Optional):</label>
+                         <input type="text" id="itemCommentToAdd" name="userComment">
+                     </div>
+                    <button type="submit" class="btn btn-primary btn-small">Add to List</button>
+                     <span id="addItemStatus" class="status-message"></span>
+                 </form>
+             </div>
+             <hr>
+         {{/if}}
+
+        {{#if list.items.length}}
+            <div class="list-items-table">
+                 <div class="table-header">
+                    <div class="col-title">Title</div>
+                    <div class="col-status">My Status</div>
+                    <div class="col-comment">List Comment</div>
+                    <div class="col-added">Added</div>
+                    {{#if isOwner}}<div class="col-actions">Actions</div>{{/if}}
+                 </div>
+                 {{#each list.items}}
+                     {{> listItemRow item=this isOwner=../isOwner listId=../list.id}}
+                 {{/each}}
+             </div>
+        {{else}}
+            <p class="placeholder-text">This list is currently empty.</p>
+        {{/if}}
+    </section>
+</div>

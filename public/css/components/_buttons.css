@@ -1,23 +1,31 @@
+/* public/css/components/_buttons.css */
 .btn {
-    display: inline-block;
+    display: inline-flex; /* Use flex for icon alignment */
+    align-items: center;
+    justify-content: center;
     padding: var(--space-sm) var(--space-lg);
-    border: var(--border-width) solid transparent; /* Base border */
-    border-radius: var(--border-radius-sm);
+    border: var(--border-width) solid transparent;
+    border-radius: var(--border-radius-md); /* Slightly more rounded */
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-medium);
     cursor: pointer;
     text-align: center;
     transition: var(--transition-base);
-    line-height: 1.2; /* Adjust for button height */
+    line-height: 1.4; /* Adjust line height */
+    white-space: nowrap; /* Prevent wrapping */
 }
 
-.btn:focus-visible { /* Modern focus outline */
-    outline: 2px solid var(--color-primary);
+.btn:focus-visible {
+    outline: var(--border-width-thick) solid var(--color-primary);
     outline-offset: 2px;
+    box-shadow: var(--shadow-input-focus);
 }
-
-.btn:active {
-    transform: scale(0.98); /* Subtle click effect */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.btn:active:not(:disabled) {
+    transform: scale(0.98);
 }
 
 /* Primary Button */
@@ -26,23 +34,23 @@
     color: var(--color-text-inverse);
     border-color: var(--color-primary);
 }
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background-color: var(--color-primary-dark);
     border-color: var(--color-primary-dark);
-    color: var(--color-text-inverse); /* Ensure hover color remains */
+    color: var(--color-text-inverse);
     text-decoration: none;
 }
 
 /* Secondary Button */
 .btn-secondary {
-    background-color: var(--color-secondary);
-    color: var(--color-text-light);
-    border-color: var(--color-secondary);
+    background-color: var(--color-bg-button-secondary);
+    color: var(--color-text-base);
+    border-color: var(--color-border);
 }
-.btn-secondary:hover {
-    background-color: var(--color-secondary-dark);
-    border-color: var(--color-secondary-dark);
-    color: var(--color-text);
+.btn-secondary:hover:not(:disabled) {
+    background-color: var(--color-bg-button-secondary-hover);
+    border-color: #adb5bd; /* Slightly darker border */
+    color: var(--color-text-heading);
     text-decoration: none;
 }
 
@@ -52,7 +60,7 @@
     color: var(--color-text-inverse);
     border-color: var(--color-danger);
 }
-.btn-danger:hover {
+.btn-danger:hover:not(:disabled) {
     background-color: var(--color-danger-dark);
     border-color: var(--color-danger-dark);
     color: var(--color-text-inverse);
@@ -61,6 +69,22 @@
 
 /* Small Button Modifier */
 .btn-small {
-    padding: var(--space-xs) var(--space-sm);
+    padding: var(--space-xs) var(--space-md);
     font-size: var(--font-size-sm);
+    border-radius: var(--border-radius-sm);
+}
+
+/* Button with Icon */
+.btn .icon {
+    margin-right: var(--space-sm);
+    font-size: 1.1em; /* Slightly larger icon */
+    line-height: 1; /* Prevent icon affecting line height */
+}
+.btn .icon.only { /* Icon only button */
+     margin-right: 0;
+}
+
+/* Specific button styles if needed */
+#logoutBtn {
+    /* Specific styles */
 }

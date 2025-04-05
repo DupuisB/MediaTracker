@@ -1,15 +1,20 @@
+/* public/css/base/_base.css */
 body {
     font-family: var(--font-family-base);
     font-size: var(--font-size-base);
-    color: var(--color-text);
-    background-color: var(--color-bg);
+    color: var(--color-text-base);
+    background-color: var(--color-bg-body);
     line-height: 1.6;
-    padding-bottom: 60px; /* Space for potential fixed footer */
+}
+
+/* Prevent background scroll when modal is open */
+body.modal-open {
+    overflow: hidden;
 }
 
 a {
     color: var(--color-text-link);
-    transition: var(--transition-base);
+    transition: var(--transition-fast);
 }
 
 a:hover {
@@ -19,33 +24,91 @@ a:hover {
 
 h1, h2, h3, h4, h5, h6 {
     margin-bottom: var(--space-md);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-heading);
+    line-height: 1.3;
 }
 
-h1 { font-size: 2rem; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.25rem; }
-h4 { font-size: 1.1rem; }
+h1 { font-size: var(--font-size-h1); }
+h2 { font-size: var(--font-size-h2); margin-bottom: var(--space-lg); } /* More space below h2 */
+h3 { font-size: var(--font-size-h3); }
+h4 { font-size: var(--font-size-xl); }
 
 p {
     margin-bottom: var(--space-md);
+    color: var(--color-text-light);
 }
 
-/* Main content wrapper */
-main {
-    margin-top: var(--space-xl);
-    margin-bottom: var(--space-xl);
+/* Main content area */
+main.container {
+    padding-top: var(--space-lg); /* Space below header */
+    padding-bottom: var(--space-xl);
+    min-height: calc(100vh - 150px); /* Adjust based on header/footer height */
 }
 
-/* Basic status/error/success message styles */
-.error-message {
-    color: var(--color-danger);
-    font-weight: var(--font-weight-medium);
-    margin-bottom: var(--space-md);
+/* General card style */
+.card {
+    background-color: var(--color-bg-card);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+    border: var(--border-width) solid var(--color-border);
 }
-.success-message {
-    color: var(--color-success);
-    font-weight: var(--font-weight-medium);
+
+/* Status/feedback messages */
+.status-message,
+.error-message, /* Keep for general errors */
+.success-message { /* Keep for general success */
+    padding: var(--space-sm) var(--space-md);
     margin-bottom: var(--space-md);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-sm);
+    border: var(--border-width) solid transparent;
+}
+.status-message.hidden { display: none; }
+
+.status-message.error, .error-message {
+    color: var(--color-danger-dark);
+    background-color: #feefee; /* Light red */
+    border-color: var(--color-danger);
+}
+.status-message.success, .success-message {
+    color: var(--color-success-dark);
+    background-color: #effcf6; /* Light green */
+    border-color: var(--color-success);
+}
+.status-message.info {
+    color: var(--color-primary-dark);
+    background-color: #eff6ff; /* Light blue */
+    border-color: var(--color-primary);
+}
+.status-message.warning {
+    color: var(--color-warning-dark);
+    background-color: #fffbeb; /* Light yellow */
+    border-color: var(--color-warning);
+}
+
+/* Global status message (fixed potentially) */
+#globalStatus {
+    position: fixed;
+    bottom: var(--space-md);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    min-width: 250px;
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+}
+
+/* Placeholder text style */
+.placeholder-text {
+    text-align: center;
+    color: var(--color-text-lighter);
+    font-style: italic;
+    padding: var(--space-xl) var(--space-md);
+}
+.placeholder-text.no-results {
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
 }

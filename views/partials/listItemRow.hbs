@@ -1,0 +1,30 @@
+{{! views/partials/listItemRow.hbs }}
+<div class="list-item-row" data-list-item-id="{{item.listItemId}}" data-library-item-id="{{item.libraryItemId}}">
+    {{!-- Checkbox functionality undefined --}}
+    {{!-- <div class="col-checkbox"><input type="checkbox"></div> --}}
+    <div class="col-title">
+        <img src="{{defaultIfEmpty item.imageUrl '/images/placeholder.png'}}" alt="" class="item-row-thumb" loading="lazy" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+        <a href="/media/{{item.mediaType}}/{{item.mediaId}}">{{item.title}}</a>
+         <span class="item-row-year">({{item.releaseYear}})</span>
+    </div>
+    <div class="col-status">
+         <span class="tag tag-status-{{classify item.userStatus}}">{{capitalize item.userStatus}}</span>
+         {{#if item.userRating}}({{item.userRating}}/10){{/if}}
+    </div>
+    <div class="col-comment">{{defaultIfEmpty item.userComment "---"}}</div>
+    <div class="col-added">{{formatDate item.dateAdded}}</div>
+     {{#if isOwner}}
+    <div class="col-actions">
+        <button class="btn btn-secondary btn-small edit-list-item-comment-btn" title="Edit Comment"><span class="icon">✏️</span></button>
+        <button class="btn btn-danger btn-small remove-list-item-btn" title="Remove from List"><span class="icon">🗑️</span></button>
+    </div>
+    {{/if}}
+     {{#if isOwner}}
+     {{!-- Hidden Edit Comment Form --}}
+     <form class="edit-comment-form hidden">
+         <input type="text" name="userComment" value="{{item.userComment}}" placeholder="Enter comment">
+         <button type="submit" class="btn btn-primary btn-small">Save</button>
+         <button type="button" class="btn btn-secondary btn-small cancel-edit-comment-btn">Cancel</button>
+     </form>
+     {{/if}}
+</div>

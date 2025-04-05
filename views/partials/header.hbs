@@ -1,18 +1,34 @@
-<header>
+{{! views/partials/header.hbs }}
+<header class="site-header">
     <div class="container header-content">
-        <a href="/" class="logo"><h1>Media Watchlist</h1></a>
-        <nav>
-            <ul>
-                <li><a href="/">Home</a></li>
-                <li><a href="/about">About</a></li>
-                {{#if user}}
-                    <li><a href="/library">My Library</a></li>
-                    <li><span class="username-display">Hi, {{user.username}}!</span></li>
-                    <li><button id="logoutBtn" class="btn btn-secondary btn-small">Logout</button></li>
-                {{else}}
-                    <li><a href="/login">Login / Register</a></li>
-                {{/if}}
-            </ul>
+        <a href="/" class="logo" aria-label="Homepage">
+            {{!-- Replace with actual SVG or Image Logo --}}
+            <span class="logo-icon">🎬</span>
+            <span class="logo-text">MediaTracker</span>
+        </a>
+
+        <div class="search-container">
+            <form action="/search" method="GET" class="header-search-form">
+                <label for="headerSearchQuery" class="sr-only">Search Media</label>
+                <input type="search" id="headerSearchQuery" name="q" placeholder="Search movies, series, books, games..." required
+                       value="{{query}}"> {{!-- Populate if on search results page --}}
+                <button type="submit" class="search-button" aria-label="Search">
+                     <span class="icon">🔍</span>
+                </button>
+            </form>
+        </div>
+
+        <nav class="user-nav">
+            {{#if user}}
+                <a href="/profile" class="profile-link" aria-label="My Profile">
+                    {{!-- Placeholder Profile Icon/Image --}}
+                    <img src="{{user.profileImageUrl}}" alt="My Profile" class="profile-icon" onerror="this.src='/images/placeholder_avatar.png';">
+                    {{!-- <span class="profile-icon">👤</span> --}}
+                </a>
+                 <button id="logoutBtn" class="btn btn-secondary btn-small" title="Logout">Logout</button>
+            {{else}}
+                <a href="/login" class="btn btn-primary btn-small">Login</a>
+            {{/if}}
         </nav>
     </div>
 </header>

@@ -1,0 +1,34 @@
+{{! views/userListsOverview.hbs }}
+<div class="lists-overview-page container">
+    <h1>My Media Lists</h1>
+
+    <div class="list-actions">
+        {{!-- This button's click is handled by main.js to open the list creation modal --}}
+        <button id="createListBtn" class="btn btn-primary">
+             <span class="icon">➕</span> Create New List
+        </button>
+    </div>
+
+     {{#if lists.length}}
+         <section class="lists-container">
+             {{!-- Iterate through the lists fetched by the viewRoute --}}
+             {{#each lists}}
+                 {{!-- Render each list using the summary row partial --}}
+                 {{!-- isOwner is true because this page only shows the logged-in user's lists --}}
+                 {{> listSummaryRow list=this isOwner=true}}
+             {{/each}}
+         </section>
+     {{else}}
+        {{!-- Message shown if the user has no lists --}}
+        <p class="placeholder-text card">You haven't created any lists yet. Click "Create New List" to start!</p>
+     {{/if}}
+
+     {{!--
+        This hidden area is targeted by main.js when the 'Create New List' or 'Edit List'
+        buttons are clicked. The JavaScript will inject the appropriate form (likely using
+        a template fetched from the server or built dynamically) into the generic 'formModal'.
+        We don't strictly need this #listFormArea div here if the JS always targets #formModal,
+        but keeping it can be a reminder or fallback target if needed.
+     --}}
+     {{!-- <div id="listFormArea" class="hidden"></div> --}}
+</div>

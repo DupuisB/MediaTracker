@@ -1,117 +1,40 @@
-header nav ul {
+/* public/css/components/_navigation.css */
+
+/* --- Header User Nav (Styles in _header.css) --- */
+
+/* --- Horizontal Navigation (Homepage) --- */
+.horizontal-nav {
     display: flex;
-    align-items: center;
-    gap: var(--space-md);
-}
-
-header nav a {
-    color: var(--color-text-inverse);
-    font-weight: var(--font-weight-medium);
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--border-radius-sm);
-    transition: background-color 0.2s ease;
-}
-
-header nav a:hover,
-header nav a.active { /* Add active class via JS if needed */
-    background-color: rgba(255, 255, 255, 0.1);
-    text-decoration: none;
-}
-
-.username-display {
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-inverse);
-    margin-right: var(--space-sm); /* Space before logout */
-}
-
-#logoutBtn {
-    color: var(--color-text-inverse);
-    background-color: transparent;
-    border: var(--border-width) solid var(--color-secondary);
-}
-#logoutBtn:hover {
-    background-color: var(--color-secondary);
-    color: var(--color-text);
-}
-
-/* Add to public/css/components/_modal.css or a new _mediaDetails.css and import */
-
-.media-details-modal .details-header {
-    display: flex;
-    gap: var(--space-lg);
+    overflow-x: auto; /* Allow scrolling on small screens */
+    padding-bottom: var(--space-sm); /* Space for scrollbar */
     margin-bottom: var(--space-lg);
-    padding-bottom: var(--space-lg);
-    border-bottom: var(--border-width) solid var(--color-border);
+    border-bottom: var(--border-width) solid var(--color-divider);
+    /* Hide scrollbar visually if desired */
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+.horizontal-nav::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
 }
 
-.media-details-modal .details-image {
-    flex-shrink: 0;
-    width: 120px;
-    height: 180px;
-    object-fit: cover;
-    border-radius: var(--border-radius-sm);
-    background-color: var(--color-secondary);
-}
 
-.media-details-modal .details-header-info h2 {
-    margin-top: 0;
-    margin-bottom: var(--space-sm);
-    font-size: 1.6rem;
-}
-
-.media-details-modal .details-meta {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-lighter);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-sm);
-    align-items: center;
-    margin-bottom: var(--space-sm); /* Reset default p margin */
-}
-
-.media-details-modal .details-body h3,
-.media-details-modal .details-body h4 {
-    margin-top: var(--space-lg);
-    margin-bottom: var(--space-xs);
-    font-size: 1.1rem;
-    font-weight: var(--font-weight-semibold);
-}
-.media-details-modal .details-body p {
-     font-size: 0.95rem;
-     margin-bottom: var(--space-sm);
-     color: var(--color-text-light);
-}
-.media-details-modal .details-body hr {
+.horizontal-nav .nav-item {
+    padding: var(--space-sm) var(--space-lg);
     border: none;
-    border-top: var(--border-width) solid var(--color-border);
-    margin: var(--space-lg) 0;
+    background: none;
+    color: var(--color-text-light);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    border-bottom: var(--border-width-thick) solid transparent; /* Indicator */
+    margin-bottom: -1px; /* Align border with container border */
+    transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
-.media-details-modal .details-actions {
-     justify-content: space-between; /* Space out actions */
+.horizontal-nav .nav-item:hover {
+    color: var(--color-text-base);
 }
 
-/* Responsive adjustments for details modal */
-@media (max-width: 500px) {
-    .media-details-modal .details-header {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-    }
-    .media-details-modal .details-header-info h2 {
-        font-size: 1.4rem;
-    }
-     .media-details-modal .details-meta {
-        justify-content: center;
-    }
-    .media-details-modal .details-actions {
-         flex-direction: column;
-         align-items: stretch;
-    }
-     .media-details-modal .details-actions button {
-        width: 100%;
-     }
-     .media-details-modal .details-actions button:last-child {
-        margin-top: var(--space-sm); /* Add space above close button */
-     }
+.horizontal-nav .nav-item.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
 }

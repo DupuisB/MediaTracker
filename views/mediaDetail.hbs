@@ -1,0 +1,114 @@
+{{! views/mediaDetail.hbs }}
+<div class="media-detail-page">
+    {{!-- Background Image / Backdrop --}}
+    {{#if item.backdropPath}} {{!-- Assuming backdropPath is provided by details API --}}
+        <div class="backdrop-image" style="background-image: url('{{item.backdropPath}}');"></div>
+    {{else}}
+         <div class="backdrop-image placeholder"></div>
+    {{/if}}
+
+    <div class="detail-content container">
+        {{!-- Main Info Section --}}
+        <section class="detail-main-info">
+            <div class="detail-poster">
+                <img src="{{defaultIfEmpty item.imageUrl '/images/placeholder.png'}}" alt="{{item.title}} Poster" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+            </div>
+            <div class="detail-text">
+                <h1>{{item.title}} {{#if item.releaseYear}}({{item.releaseYear}}){{/if}}</h1>
+                <p class="detail-subtitle">{{item.subtitle}}</p>
+                <div class="detail-meta">
+                    <span class="tag tag-{{classify item.mediaType}}">{{capitalize item.mediaType}}</span>
+                    {{#if item.genres.length}}<span>{{join item.genres ", "}}</span>{{/if}}
+                     {{#if item.runtime}}<span>{{item.runtime}}</span>{{/if}} {{!-- Add runtime if available --}}
+                     {{#if item.releaseDate}}<span>Released: {{formatDate item.releaseDate}}</span>{{/if}}
+                </div>
+                <div class="detail-actions">
+                     {{!-- User Interaction Partial --}}
+                     {{> userInteractionControls item=item user=user}}
+                </div>
+                <h3>Overview</h3>
+                <p class="detail-description">{{defaultIfEmpty item.description "No description available."}}</p>
+            </div>
+        </section>
+
+         {{!-- Metadata Section --}}
+        <section class="detail-metadata card">
+            <h3>Details</h3>
+            <div class="metadata-grid">
+                {{#if item.directors.length}}<div class="meta-item"><span class="meta-label">Director(s):</span> <span class="meta-value">{{join item.directors ", "}}</span></div>{{/if}}
+                {{#if item.screenwriters.length}}<div class="meta-item"><span class="meta-label">Writer(s):</span> <span class="meta-value">{{join item.screenwriters ", "}}</span></div>{{/if}}
+                {{#if item.authors.length}}<div class="meta-item"><span class="meta-label">Author(s):</span> <span class="meta-value">{{join item.authors ", "}}</span></div>{{/if}}
+                 {{#if item.developers.length}}<div class="meta-item"><span class="meta-label">Developer(s):</span> <span class="meta-value">{{join item.developers ", "}}</span></div>{{/if}}
+                {{#if item.publisher}}<div class="meta-item"><span class="meta-label">Publisher:</span> <span class="meta-value">{{item.publisher}}</span></div>{{/if}}
+                {{#if item.platforms.length}}<div class="meta-item"><span class="meta-label">Platform(s):</span> <span class="meta-value">{{join item.platforms ", "}}</span></div>{{/if}}
+                 {{#if item.pageCount}}<div class="meta-item"><span class="meta-label">Pages:</span> <span class="meta-value">{{item.pageCount}}</span></div>{{/if}}
+
+                 {{#if item.apiRating}}
+                 <div class="meta-item">
+                     <span class="meta-label">Community Rating:</span>
+                     <span class="meta-value rating-display">
+                        {{renderStars item.apiRating 10}} ({{item.apiRating}}/10)
+                     </span>
+                 </div>
+                 {{/if}}
+                 {{!-- External Links --}}
+                  <div class="meta-item external-links">
+                     {{#if item.imdbId}} <a href="https://www.imdb.com/title/{{item.imdbId}}/" target="_blank" rel="noopener">IMDb</a> {{/if}}
+                     {{#if item.tmdbLink}} <a href="{{item.tmdbLink}}" target="_blank" rel="noopener">TMDB</a> {{/if}}
+                     {{#if item.googleBooksLink}} <a href="{{item.googleBooksLink}}" target="_blank" rel="noopener">Google Books</a> {{/if}}
+                     {{#if item.igdbLink}} <a href="{{item.igdbLink}}" target="_blank" rel="noopener">IGDB</a> {{/if}}
+                 </div>
+            </div>
+        </section>
+
+        {{!-- Cast/Characters Section --}}
+         {{#if item.cast.length}}
+         <section class="detail-cast-section card">
+             <h3>Cast</h3>
+              <div class="swiper cast-swiper">
+                 <div class="swiper-wrapper">
+                     {{#each item.cast}}
+                         <div class="swiper-slide cast-member">
+                             <img src="{{#if profilePath}}https://image.tmdb.org/t/p/w185{{profilePath}}{{else}}/images/placeholder_avatar.png{{/if}}" alt="{{name}}" loading="lazy" onerror="this.src='/images/placeholder_avatar.png';">
+                             <p class="cast-name">{{name}}</p>
+                             <p class="cast-character">{{character}}</p>
+                         </div>
+                     {{/each}}
+                 </div>
+                 <div class="swiper-button-prev"></div>
+                 <div class="swiper-button-next"></div>
+             </div>
+         </section>
+         {{/if}}
+
+
+        {{!-- Related Media Section (Placeholder Data) --}}
+        {{#if relatedMedia.length}}
+        <section class="media-carousel-section card">
+            <h3 class="section-title">Related Media</h3>
+            <div class="swiper media-swiper">
+                <div class="swiper-wrapper">
+                     {{#each relatedMedia}}
+                     <div class="swiper-slide">
+                         {{> mediaCard items=(list this) }}
+                      </div>
+                     {{/each}}
+                </div>
+                 <div class="swiper-button-prev"></div>
+                 <div class="swiper-button-next"></div>
+            </div>
+        </section>
+        {{/if}}
+
+        {{!-- Reviews Section (Placeholder) --}}
+        <section class="detail-reviews-section card">
+            <h3>Reviews (Coming Soon)</h3>
+            <p class="placeholder-text">User reviews will appear here.</p>
+             {{!-- Example Review structure --}}
+             {{#each reviews}}
+             <div class="review-item"> ... </div>
+             {{/each}}
+        </section>
+
+    </div>
+</div>

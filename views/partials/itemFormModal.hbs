@@ -1,45 +1,52 @@
 {{! views/partials/itemFormModal.hbs }}
-{{! Used by client-side JS to populate the generic modal }}
+{{! Modal used for Adding/Editing items in the LIBRARY }}
 <button class="modal-close-btn" aria-label="Close">×</button>
-<h2 id="modalTitle">{{modalTitle}}</h2>
+<h2>{{modalTitle}}</h2>
 
-<form id="itemForm">
-    {{!-- Hidden fields managed by JS --}}
-    <input type="hidden" id="formMode" value="{{mode}}">
-    <input type="hidden" id="itemId" value="{{item.id}}">
-    <input type="hidden" id="mediaId" value="{{item.mediaId}}">
-    <input type="hidden" id="mediaType" value="{{item.mediaType}}">
-    {{!-- Store core data needed if adding --}}
-    <input type="hidden" id="coreTitle" value="{{item.title}}">
-    <input type="hidden" id="coreImageUrl" value="{{item.imageUrl}}">
-    <input type="hidden" id="coreApiDescription" value="{{item.apiDescription}}">
+<form id="libraryItemForm" data-mode="{{mode}}" data-item-id="{{item.id}}" data-library-item-id="{{item.libraryItemId}}">
+    {{!-- Hidden fields for context if needed --}}
+    <input type="hidden" name="mediaType" value="{{item.mediaType}}">
+    <input type="hidden" name="mediaId" value="{{item.mediaId}}">
+     {{!-- Core details needed only for ADD --}}
+     {{#if (eq mode 'add')}}
+    <input type="hidden" name="title" value="{{item.title}}">
+    <input type="hidden" name="imageUrl" value="{{item.imageUrl}}">
+    <input type="hidden" name="releaseYear" value="{{item.releaseYear}}">
+     {{/if}}
+
 
     {{#if item.imageUrl}}
-    <img src="{{item.imageUrl}}" alt="{{item.title}}" class="modal-image-preview" onerror="this.style.display='none';">
+        <img src="{{item.imageUrl}}" alt="{{item.title}}" class="modal-image-preview" onerror="this.style.display='none';">
     {{/if}}
+    <p><strong>{{item.title}}</strong> ({{item.releaseYear}})</p>
 
     <div class="form-group">
-        <label for="userStatus">Your Status:</label>
+        <label for="userStatus">Status:</label>
         <select id="userStatus" name="userStatus" required>
-            <option value="" disabled {{#unless item.userStatus}}selected{{/unless}}>-- Select Status --</option>
-            {{#each validStatuses}}
-            <option value="{{this}}" {{#if (eq this ../item.userStatus)}}selected{{/if}}>
-                {{capitalize this}}
-            </option>
-            {{/each}}
+            {{!-- Use new statuses --}}
+            <option value="planned" {{#if (eq item.userStatus 'planned')}}selected{{/if}}>Planned</option>
+            <option value="watching" {{#if (eq item.userStatus 'watching')}}selected{{/if}}>Watching / Reading / Playing</option>
+            <option value="completed" {{#if (eq item.userStatus 'completed')}}selected{{/if}}>Completed</option>
+            <option value="paused" {{#if (eq item.userStatus 'paused')}}selected{{/if}}>Paused</option>
+            <option value="dropped" {{#if (eq item.userStatus 'dropped')}}selected{{/if}}>Dropped</option>
         </select>
     </div>
     <div class="form-group">
-        <label for="userRating">Your Rating (1-20):</label>
-        <input type="number" id="userRating" name="userRating" min="1" max="20" placeholder="Optional" value="{{item.userRating}}">
+        <label for="userRating">Rating (1-10):</label>
+        <input type="number" id="userRating" name="userRating" min="1" max="10" placeholder="None" value="{{item.userRating}}">
+    </div>
+     <div class="form-group">
+        <label for="isFavorite">Favorite:</label>
+         <input type="checkbox" id="isFavorite" name="isFavorite" value="true" {{#if item.isFavorite}}checked{{/if}}>
     </div>
     <div class="form-group">
-        <label for="userDescription">Your Notes:</label>
-        <textarea id="userDescription" name="userDescription" rows="3" placeholder="Optional">{{item.userDescription}}</textarea>
+        <label for="userNotes">Notes:</label>
+        <textarea id="userNotes" name="userNotes" rows="3" placeholder="Your personal notes...">{{item.userNotes}}</textarea>
     </div>
     <div class="modal-actions">
         <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
         <button type="submit" class="btn btn-primary">{{submitButtonText}}</button>
+        <div id="modalSpinner" class="spinner hidden"></div>
     </div>
-     <p class="modal-error-message hidden"></p> {{!-- For displaying form errors --}}
+     <p class="modal-error-message hidden"></p>
 </form>

@@ -1,45 +1,151 @@
-header {
-    background-color: var(--color-text-light);
-    color: var(--color-text-inverse);
-    padding-top: var(--space-sm);
-    padding-bottom: var(--space-sm);
+/* public/css/layout/_header.css */
+.site-header {
+    background-color: var(--color-bg-header);
+    border-bottom: var(--border-width) solid var(--color-bg-header-border);
+    padding: var(--space-sm) 0;
+    position: sticky; /* Make header sticky */
+    top: 0;
+    z-index: var(--z-index-header);
     box-shadow: var(--shadow-sm);
 }
 
 .header-content {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap; /* Allow wrapping on small screens */
+    justify-content: space-between;
+    gap: var(--space-lg);
+}
+
+/* Logo */
+.logo {
+    display: flex;
+    align-items: center;
     gap: var(--space-sm);
-}
-
-.logo h1 {
-    font-size: 1.5rem;
     font-weight: var(--font-weight-bold);
-    margin-bottom: 0; /* Reset margin */
-    color: inherit; /* Inherit color from header */
+    font-size: var(--font-size-xl);
+    color: var(--color-text-heading);
+    flex-shrink: 0; /* Prevent shrinking */
 }
-
-.logo a:hover {
+.logo:hover {
     text-decoration: none;
     opacity: 0.9;
 }
+.logo-icon {
+    font-size: 1.8rem; /* Adjust icon size */
+}
+.logo-text {
+    display: block; /* Default display */
+}
 
-/* Responsive header adjustments */
+/* Search Container */
+.search-container {
+    flex-grow: 1; /* Take available space */
+    max-width: 500px; /* Limit search width */
+    margin: 0 var(--space-md); /* Add some margin */
+}
+
+.header-search-form {
+    display: flex;
+    align-items: center;
+    background-color: var(--color-bg-body); /* Slight contrast */
+    border-radius: var(--border-radius-md);
+    border: var(--border-width) solid var(--color-border);
+    overflow: hidden; /* Contain button */
+}
+.header-search-form:focus-within {
+    border-color: var(--color-border-input-focus);
+    box-shadow: var(--shadow-input-focus);
+}
+
+#headerSearchQuery {
+    flex-grow: 1;
+    border: none;
+    outline: none;
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    font-size: var(--font-size-base);
+}
+#headerSearchQuery::placeholder {
+    color: var(--color-text-lighter);
+    opacity: 1;
+}
+
+.search-button {
+    padding: var(--space-sm) var(--space-md);
+    background-color: transparent;
+    border-left: var(--border-width) solid var(--color-border);
+    color: var(--color-text-light);
+    transition: background-color var(--transition-fast);
+}
+.search-button:hover {
+    background-color: var(--color-bg-button-secondary);
+    color: var(--color-text-base);
+}
+.search-button .icon {
+    font-size: 1.1rem;
+    display: block; /* Ensure icon aligns */
+}
+
+/* User Navigation */
+.user-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    flex-shrink: 0;
+}
+
+.profile-link {
+    display: block;
+}
+.profile-link:hover {
+    text-decoration: none;
+    opacity: 0.85;
+}
+
+.profile-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: var(--border-width-thick) solid var(--color-border);
+}
+
+/* Responsive Header */
 @media (max-width: 768px) {
     .header-content {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: var(--space-sm);
     }
-    header nav {
+    .search-container {
+        order: 3; /* Move search below logo/nav */
         width: 100%;
+        max-width: none;
+        margin: var(--space-sm) 0 0 0; /* Add top margin */
     }
-    header nav ul {
-        flex-direction: column;
-        align-items: flex-start;
+    .logo-text {
+        display: none; /* Hide text on small screens */
     }
-    header nav li {
-        margin-top: var(--space-xs);
+    .user-nav {
+        /* Adjust spacing if needed */
     }
+}
+
+@media (max-width: 480px) {
+     .logo {
+        font-size: 1rem; /* Smaller logo text */
+     }
+     .profile-icon {
+         width: 32px;
+         height: 32px;
+     }
+     .user-nav {
+        gap: var(--space-sm);
+     }
+     #headerSearchQuery {
+        padding: var(--space-xs) var(--space-sm);
+        font-size: var(--font-size-sm);
+     }
+      .search-button {
+        padding: var(--space-xs) var(--space-sm);
+     }
 }

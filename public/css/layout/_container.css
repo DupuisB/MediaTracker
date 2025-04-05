@@ -1,8 +1,17 @@
+/* public/css/layout/_container.css */
 .container {
     width: 100%;
-    max-width: 1200px;
+    max-width: 1280px; /* Wider max-width */
     margin-left: auto;
     margin-right: auto;
-    padding-left: var(--space-md);
-    padding-right: var(--space-md);
+    padding-left: var(--space-lg); /* Slightly more padding */
+    padding-right: var(--space-lg);
+}
+
+/* Responsive padding */
+@media (max-width: 768px) {
+    .container {
+        padding-left: var(--space-md);
+        padding-right: var(--space-md);
+    }
 }

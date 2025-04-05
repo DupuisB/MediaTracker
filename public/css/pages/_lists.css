@@ -1,0 +1,113 @@
+/* public/css/pages/_lists.css */
+
+/* --- Lists Overview Page --- */
+.lists-overview-page h1 {
+    margin-bottom: var(--space-md);
+    text-align: center;
+}
+.list-actions {
+    text-align: center;
+    margin-bottom: var(--space-xl);
+}
+
+.lists-container {
+    /* Container for list summary rows */
+}
+#listFormArea { margin-top: var(--space-lg); }
+#listFormArea.hidden { display: none; }
+
+
+/* --- List Detail Page --- */
+.list-detail-header {
+    display: flex;
+    gap: var(--space-xl);
+    margin-bottom: var(--space-xl);
+}
+.list-cover {
+    flex-basis: 250px; /* Adjust size */
+    flex-shrink: 0;
+}
+.list-cover img {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-radius: var(--border-radius-md);
+    background-color: var(--color-border);
+}
+.list-info {
+    flex-grow: 1;
+}
+.list-info h1 {
+    margin-bottom: var(--space-xs);
+}
+.list-owner {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    margin-bottom: var(--space-md);
+}
+.list-owner a { font-weight: var(--font-weight-medium); }
+.list-description {
+    color: var(--color-text-base);
+    margin-bottom: var(--space-md);
+    line-height: 1.6;
+}
+.list-meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-lighter);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+.list-owner-actions {
+    margin-top: var(--space-md);
+    display: flex;
+    gap: var(--space-sm);
+}
+
+/* Items Section */
+.list-items-section {
+    margin-top: var(--space-xl);
+}
+.list-items-section h2 {
+    margin-bottom: var(--space-md);
+}
+
+/* Add Item Form */
+.add-item-to-list form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-md);
+    padding: var(--space-md);
+    background-color: #f8f9fa;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--color-border);
+}
+.add-item-to-list .form-group {
+    margin-bottom: 0;
+    flex-grow: 1;
+}
+.add-item-to-list label { font-size: var(--font-size-xs); }
+.add-item-to-list input { font-size: var(--font-size-sm); padding: var(--space-xs) var(--space-sm); }
+.add-item-to-list small {
+     display: block;
+     font-size: var(--font-size-xs);
+     color: var(--color-text-lighter);
+     margin-top: var(--space-xs);
+}
+.add-item-to-list button { flex-shrink: 0; }
+.add-item-to-list .status-message { margin-left: var(--space-md); padding: 0; background: none; border: none; }
+
+/* List Items Table styles in _listRow.css */
+
+/* Responsive List Detail */
+@media (max-width: 768px) {
+    .list-detail-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    .list-cover { flex-basis: auto; width: 100%; max-width: 300px; }
+    .list-info h1 { font-size: var(--font-size-h2); }
+}

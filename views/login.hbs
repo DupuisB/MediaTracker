@@ -1,18 +1,40 @@
-<section class="auth-page card">
-    <h2>Login or Register</h2>
+{{! views/login.hbs }}
+{{!-- Use a different layout potentially without the main header/nav --}}
+{{!< auth }} {{!-- Assuming an auth.hbs layout exists or modify main.hbs --}}
+
+<div class="auth-container">
+    <div class="auth-logo">
+        <span class="logo-icon">🎬</span> MediaTracker
+    </div>
+
     {{#if loginError}}
         <p class="error-message">{{loginError}}</p>
     {{/if}}
      {{#if registerMessage}}
         <p class="success-message">{{registerMessage}}</p>
     {{/if}}
+     {{#if errorMessage}} {{!-- General errors passed via query param maybe --}}
+        <p class="error-message">{{errorMessage}}</p>
+    {{/if}}
 
-    <div class="auth-forms-container">
-        <div class="auth-form">
+
+    <div class="auth-forms">
+        {{!-- Login Form --}}
+        <div class="auth-form-card">
             {{> loginForm }}
         </div>
-        <div class="auth-form">
-             {{> registerForm }}
+
+         {{!-- Separator --}}
+         <div class="auth-separator">
+            <span>OR</span>
+         </div>
+
+
+        {{!-- Register Form --}}
+         <div class="auth-form-card">
+            {{> registerForm }}
         </div>
     </div>
-</section>
+
+     <p class="auth-footer-link"><a href="/">Back to Home</a></p>
+</div>

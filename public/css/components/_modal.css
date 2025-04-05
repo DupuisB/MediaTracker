@@ -1,44 +1,46 @@
+/* public/css/components/_modal.css */
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background-color: var(--color-overlay);
+    background-color: var(--color-bg-modal-overlay);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: var(--z-index-modal-backdrop);
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0s linear 0.3s;
-    padding: var(--space-md); /* Padding for smaller screens */
+    transition: opacity var(--transition-slow), visibility 0s linear var(--transition-slow);
+    padding: var(--space-lg); /* Padding for smaller screens */
+    overflow-y: auto; /* Allow scrolling if modal is too tall */
 }
 
 .modal-overlay:not(.hidden) {
     opacity: 1;
     visibility: visible;
-    transition: opacity 0.3s ease;
+    transition: opacity var(--transition-slow);
 }
 
 .modal-content {
-    background-color: var(--color-bg-alt);
-    padding: var(--space-lg);
-    border-radius: var(--border-radius-md);
+    background-color: var(--color-bg-card);
+    padding: var(--space-xl); /* More padding */
+    border-radius: var(--border-radius-lg); /* Larger radius */
     box-shadow: var(--shadow-lg);
     width: 100%;
-    max-width: 500px;
+    max-width: 550px; /* Default max-width */
     position: relative;
-    transform: scale(0.95);
-    transition: transform 0.3s ease;
-    max-height: 90vh; /* Limit height */
-    overflow-y: auto; /* Add scroll if content exceeds */
+    transform: scale(0.95) translateY(10px);
+    transition: transform var(--transition-slow), opacity var(--transition-slow);
+    opacity: 0;
+    margin: var(--space-lg) 0; /* Allow space top/bottom */
 }
 .modal-overlay:not(.hidden) .modal-content {
-     transform: scale(1);
+     transform: scale(1) translateY(0);
+     opacity: 1;
 }
-
 
 .modal-close-btn {
     position: absolute;
-    top: var(--space-sm);
+    top: var(--space-md);
     right: var(--space-md);
     background: none;
     border: none;
@@ -46,55 +48,61 @@
     color: var(--color-text-lighter);
     cursor: pointer;
     line-height: 1;
-    padding: var(--space-xs); /* Increase click area */
+    padding: var(--space-xs);
+    transition: color var(--transition-fast);
 }
 .modal-close-btn:hover {
-    color: var(--color-text);
+    color: var(--color-text-base);
 }
 
 .modal-content h2 {
     margin-top: 0;
     margin-bottom: var(--space-lg);
     text-align: center;
-    font-size: 1.4rem;
+    font-size: var(--font-size-h3);
+    color: var(--color-text-heading);
+}
+
+.modal-image-preview {
+    max-width: 150px;
+    height: auto;
+    margin: 0 auto var(--space-md);
+    display: block;
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--color-border);
 }
 
 .modal-actions {
-    margin-top: var(--space-lg);
+    margin-top: var(--space-xl);
     display: flex;
     justify-content: flex-end;
-    gap: var(--space-sm);
-    border-top: var(--border-width) solid var(--color-border);
-    padding-top: var(--space-md);
+    gap: var(--space-md);
+    border-top: var(--border-width) solid var(--color-divider);
+    padding-top: var(--space-lg);
+    align-items: center; /* Align spinner */
+}
+.modal-actions .spinner {
+    margin-left: var(--space-sm);
 }
 
-.modal-error-message {
-    color: var(--color-danger);
-    font-weight: var(--font-weight-medium);
-    margin-top: var(--space-md);
+
+/* Confirmation Modal */
+.modal-confirm .modal-content {
+    max-width: 450px;
     text-align: center;
-    font-size: var(--font-size-sm);
+    padding-top: var(--space-xl);
 }
-
-/* Add to public/css/components/_modal.css */
-
-.modal-confirm {
-    max-width: 400px; /* Smaller width for confirmation */
-    text-align: center;
-}
-
 .modal-confirm h3 {
-    margin-bottom: var(--space-sm);
-    color: var(--color-danger);
+    margin-bottom: var(--space-md);
+    color: var(--color-danger); /* Or based on context */
+    font-size: var(--font-size-xl);
 }
-
 .modal-confirm p {
     margin-bottom: var(--space-lg);
     color: var(--color-text-light);
 }
-
 .modal-confirm .modal-actions {
-    justify-content: center; /* Center buttons */
-    border-top: none; /* Remove top border */
+    justify-content: center;
+    border-top: none;
     padding-top: 0;
 }

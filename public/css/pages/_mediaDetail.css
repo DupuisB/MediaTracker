@@ -1,0 +1,209 @@
+/* public/css/pages/_mediaDetail.css */
+.media-detail-page {
+    /* Container already provides padding */
+}
+
+/* Backdrop */
+.backdrop-image {
+    height: 300px; /* Adjust height */
+    background-size: cover;
+    background-position: center center;
+    margin: calc(-1 * var(--space-lg)) calc(-1 * var(--space-lg)) var(--space-lg); /* Extend outside container padding */
+    position: relative;
+    border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg); /* Rounded bottom */
+    overflow: hidden;
+}
+.backdrop-image.placeholder {
+    background-color: var(--color-border);
+}
+/* Optional overlay */
+.backdrop-image::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0) 100%);
+}
+
+
+.detail-content {
+    position: relative; /* To position content above backdrop gradient */
+    margin-top: -80px; /* Pull content up over the backdrop */
+    z-index: 1;
+}
+
+/* Main Info Section */
+.detail-main-info {
+    display: flex;
+    gap: var(--space-xl);
+    align-items: flex-start; /* Align poster top */
+    margin-bottom: var(--space-xl);
+}
+
+.detail-poster {
+    flex-basis: 200px; /* Fixed width for poster */
+    flex-shrink: 0;
+    margin-top: -40px; /* Pull poster up further */
+}
+.detail-poster img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2 / 3;
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-lg);
+    border: 3px solid var(--color-bg-card); /* Border effect */
+}
+
+.detail-text {
+    flex-grow: 1;
+    padding-top: var(--space-md); /* Align text roughly with top of poster visually */
+}
+.detail-text h1 {
+    font-size: var(--font-size-h1);
+    margin-bottom: var(--space-xs);
+    color: var(--color-text-inverse); /* White text on backdrop */
+    text-shadow: 1px 1px 3px rgba(0,0,0,0.5); /* Shadow for readability */
+}
+.detail-subtitle {
+    font-size: var(--font-size-lg);
+    color: #e2e8f0; /* Lighter text */
+    margin-bottom: var(--space-md);
+    font-style: italic;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
+}
+.detail-meta {
+    margin-bottom: var(--space-md);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm) var(--space-md);
+    align-items: center;
+    color: #cbd5e0; /* Lighter meta text */
+}
+.detail-meta .tag {
+     background-color: rgba(255,255,255, 0.2);
+     color: var(--color-text-inverse);
+     border: none;
+     font-size: var(--font-size-xs);
+}
+.detail-meta span {
+     font-size: var(--font-size-sm);
+}
+
+.detail-actions {
+    margin-top: var(--space-lg);
+}
+
+.detail-description {
+    margin-top: var(--space-lg);
+    color: var(--color-text-light); /* Use regular text color now */
+    line-height: 1.7;
+}
+.detail-description:first-of-type { /* If overview is first element */
+     margin-top: var(--space-xl); /* Add more space below interaction */
+     color: var(--color-text-base);
+}
+.detail-text h3 { /* Overview heading */
+    margin-top: var(--space-xl);
+    margin-bottom: var(--space-sm);
+     color: var(--color-text-heading);
+}
+
+
+/* Metadata Section */
+.detail-metadata {
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+.detail-metadata h3 {
+     margin-top: 0;
+     margin-bottom: var(--space-md);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-sm) var(--space-lg);
+}
+.meta-item {
+    font-size: var(--font-size-sm);
+}
+.meta-label {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-base);
+    margin-right: var(--space-xs);
+}
+.meta-value {
+    color: var(--color-text-light);
+}
+.rating-display .star {
+     font-size: 1.1em;
+     color: var(--color-star-empty);
+}
+.rating-display .star.filled {
+    color: var(--color-star-filled);
+}
+.external-links a {
+    margin-right: var(--space-md);
+    font-weight: var(--font-weight-medium);
+    display: inline-block;
+}
+
+
+/* Cast Section */
+.detail-cast-section { padding: var(--space-lg); margin-bottom: var(--space-xl); }
+.detail-cast-section h3 { margin-top: 0; margin-bottom: var(--space-md); }
+
+.cast-member {
+    text-align: center;
+}
+.cast-member img {
+    width: 80px; /* Size for cast images */
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto var(--space-xs);
+    border: 1px solid var(--color-border);
+}
+.cast-name {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-base);
+    margin-bottom: 0;
+}
+.cast-character {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-lighter);
+    margin-bottom: 0;
+}
+
+/* Related Media / Reviews */
+.detail-reviews-section,
+.media-carousel-section.card { /* Style related section like a card */
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+.detail-reviews-section h3,
+.media-carousel-section.card h3 {
+    margin-top: 0;
+    margin-bottom: var(--space-md);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .backdrop-image { height: 250px; }
+    .detail-content { margin-top: -60px; }
+    .detail-main-info { flex-direction: column; align-items: center; text-align: center; }
+    .detail-poster { flex-basis: auto; width: 180px; margin-top: -80px; /* Adjust pull-up */ }
+    .detail-text { padding-top: 0; width: 100%; }
+    .detail-text h1 { font-size: 1.8rem; color: var(--color-text-heading); text-shadow: none; margin-top: var(--space-md); }
+    .detail-subtitle { color: var(--color-text-light); text-shadow: none; }
+    .detail-meta { justify-content: center; color: var(--color-text-light); }
+    .detail-meta .tag { background-color: var(--color-bg-button-secondary); color: var(--color-text-light); border: 1px solid var(--color-border); }
+}
+
+@media (max-width: 480px) {
+     .backdrop-image { height: 200px; }
+     .detail-content { margin-top: -50px; }
+     .detail-poster { width: 150px; margin-top: -60px; }
+     .detail-text h1 { font-size: 1.5rem; }
+     .metadata-grid { grid-template-columns: 1fr; } /* Stack metadata */
+}

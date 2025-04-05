@@ -1,3 +1,4 @@
+{{!-- Ensure the id="registerForm" is present on the form tag --}}
 <form id="registerForm">
     <h3>Register</h3>
     <div class="form-group">
@@ -8,7 +9,10 @@
         <label for="regPassword">Password (min 6 chars):</label>
         <input type="password" id="regPassword" name="password" required minlength="6">
     </div>
-    <button type="submit" class="btn btn-secondary">Register</button>
-     <p id="registerMessage" class="form-message hidden"></p>
-     <p id="registerError" class="form-error hidden"></p>
+     <div class="form-actions">
+        <button type="submit" class="btn btn-secondary">Register</button>
+         <div id="registerSpinner" class="spinner hidden"></div>
+    </div>
+     <p id="registerMessage" class="form-message hidden" aria-live="polite"></p>
+     <p id="registerError" class="form-error hidden" aria-live="assertive"></p>
 </form>

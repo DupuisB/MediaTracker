@@ -1,4 +1,6 @@
 // auth.js
+// No changes required based on the new design for non-social features.
+// Keep the existing file content.
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
@@ -67,7 +69,7 @@ function verifyToken(req, res, next) {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.userId = decoded.id; // Add user ID for API route handlers
-        req.user = decoded; // Optional: Add full decoded payload
+        req.user = decoded; // Optional: Add full decoded payload (username, id)
         next();
     } catch (error) {
         clearAuthCookie(res); // Clear invalid/expired cookie
@@ -107,7 +109,7 @@ function requireLogin(req, res, next) {
     if (!res.locals.user) {
         // Optional: Store intended URL using session middleware if needed
         // req.session.returnTo = req.originalUrl;
-        return res.redirect('/login');
+        return res.redirect('/login'); // Redirect to new login page route
     }
     next(); // User is logged in
 }

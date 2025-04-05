@@ -1,31 +1,35 @@
-/* Simple Reset */
+/* public/css/base/_reset.css */
+/* Keep the existing simple reset */
 *,
 *::before,
 *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 html {
     line-height: 1.5;
-    -webkit-text-size-adjust: 100%; /* Prevent font scaling in landscape */
-    -moz-tab-size: 4;
+    -webkit-text-size-adjust: 100%;
     tab-size: 4;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; /* System font stack */
+    font-family: var(--font-family-base);
 }
 
 body {
     min-height: 100vh;
+    line-height: 1.6; /* Slightly more line height */
 }
 
 img, picture, video, canvas, svg {
     display: block;
     max-width: 100%;
+    height: auto; /* Maintain aspect ratio by default */
 }
 
 input, button, textarea, select {
-    font: inherit; /* Inherit font styles */
+    font: inherit;
 }
 
 button {
@@ -33,6 +37,7 @@ button {
     background: none;
     border: none;
     color: inherit;
+    padding: 0; /* Remove default padding */
 }
 
 ol, ul {
@@ -45,18 +50,16 @@ a {
 }
 
 h1, h2, h3, h4, h5, h6 {
-    text-wrap: balance; /* Improve heading wrapping */
+    text-wrap: balance;
 }
 
 p {
-   text-wrap: pretty; /* Improve paragraph wrapping */
+   text-wrap: pretty;
 }
 
-/* Improve screen reader experience */
+/* Accessibility improvements */
 @media (prefers-reduced-motion: reduce) {
-  html:focus-within {
-   scroll-behavior: auto;
-  }
+  html:focus-within { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

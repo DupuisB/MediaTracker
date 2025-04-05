@@ -1,3 +1,4 @@
+{{!-- Ensure the id="loginForm" is present on the form tag --}}
 <form id="loginForm">
     <h3>Login</h3>
     <div class="form-group">
@@ -8,6 +9,9 @@
         <label for="loginPassword">Password:</label>
         <input type="password" id="loginPassword" name="password" required>
     </div>
-    <button type="submit" class="btn btn-primary">Login</button>
-    <p id="loginError" class="form-error hidden"></p>
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Login</button>
+        <div id="loginSpinner" class="spinner hidden"></div>
+    </div>
+    <p id="loginError" class="form-error hidden" aria-live="assertive"></p>
 </form>

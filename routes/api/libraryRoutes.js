@@ -1,6 +1,6 @@
 // routes/api/libraryRoutes.js
 const express = require('express');
-const db = require('../../dbUtils'); // Use promisified utils
+const db = require('../../database'); // Use promisified db
 const { verifyToken } = require('../../auth');
 
 const router = express.Router();
@@ -8,196 +8,246 @@ const router = express.Router();
 // Apply auth middleware to all library routes
 router.use(verifyToken);
 
-// --- Helpers ---
+// --- Constants and Helpers ---
 const VALID_MEDIA_TYPES = ['movie', 'series', 'book', 'video game'];
-const STATUS_MAP = {
-    'movie': ['to watch', 'watching', 'watched'],
-    'series': ['to watch', 'watching', 'watched'],
-    'book': ['to read', 'reading', 'read'],
-    'video game': ['to play', 'playing', 'played'],
-};
-const COMPLETED_STATUSES = ['watched', 'read', 'played'];
+const VALID_STATUSES = ['planned', 'watching', 'completed', 'paused', 'dropped'];
+const COMPLETED_STATUS = 'completed'; // Single status for completion
 
-function isValidStatusForType(status, mediaType) {
-    return STATUS_MAP[mediaType]?.includes(status.toLowerCase());
+// Helper function to validate and parse rating (1-10 scale)
+function parseAndValidateRating(ratingInput) {
+    if (ratingInput === undefined || ratingInput === null || ratingInput === '') {
+        return null; // Allow clearing rating
+    }
+    const rating = parseInt(ratingInput, 10);
+    if (isNaN(rating) || rating < 1 || rating > 10) {
+        throw new Error('Invalid userRating. Must be an integer between 1 and 10, or null/empty.');
+    }
+    return rating;
 }
 
-function getValidStatusesForType(mediaType) {
-    return STATUS_MAP[mediaType] || [];
+// Helper function to validate status
+function validateStatus(statusInput) {
+     if (!statusInput || !VALID_STATUSES.includes(statusInput.toLowerCase())) {
+         throw new Error(`Invalid userStatus. Must be one of: ${VALID_STATUSES.join(', ')}.`);
+     }
+     return statusInput.toLowerCase();
 }
 
-// --- Get Library Items (with filtering) ---
+// Helper function to parse boolean
+function parseBoolean(value) {
+    if (value === undefined || value === null) return undefined; // Keep undefined if not provided
+    return ['true', '1', 'yes', true].includes(value?.toString().toLowerCase());
+}
+
+// --- Get Library Items (with filtering/sorting) ---
 router.get('/', async (req, res) => {
-    const userId = req.userId;
-    const { mediaType, userStatus, minRating, maxRating } = req.query;
+    // Allow filtering by specific userId (for profile page) or default to logged-in user
+    const requestingUserId = req.userId; // User making the request
+    const targetUserId = req.query.userId ? parseInt(req.query.userId, 10) : requestingUserId; // User whose library is requested
 
-    let sql = `SELECT * FROM library_items WHERE userId = ?`;
-    const params = [userId];
+    if (isNaN(targetUserId)) {
+        return res.status(400).json({ message: 'Invalid userId provided.' });
+    }
+
+    // Basic permission check: Allow only if requesting own library or target profile is public (implement later if needed)
+    // For now, assume access is allowed if authenticated for simplicity of non-social features
+
+    // Filtering/Sorting Params
+    const { mediaType, userStatus, isFavorite, sortBy, limit } = req.query;
+    const favoriteFilter = parseBoolean(isFavorite); // Convert 'true'/'false'/'1'/'0' to boolean
+
+    let sql = `SELECT id, userId, mediaType, mediaId, title, imageUrl, releaseYear, userStatus, userRating, isFavorite, addedAt, updatedAt, completedAt FROM library_items WHERE userId = ?`;
+    const params = [targetUserId];
 
     try {
-        if (mediaType) {
-            if (!VALID_MEDIA_TYPES.includes(mediaType)) {
-                return res.status(400).json({ message: 'Invalid mediaType specified.' });
-            }
+        // Apply Filters
+        if (mediaType && VALID_MEDIA_TYPES.includes(mediaType)) {
             sql += ` AND mediaType = ?`;
             params.push(mediaType);
         }
-        if (userStatus) {
-            // Basic check - more robust validation could check against mediatype if needed
+        if (userStatus && VALID_STATUSES.includes(userStatus.toLowerCase())) {
              sql += ` AND userStatus = ?`;
              params.push(userStatus.toLowerCase());
         }
-        if (minRating) {
-            const minR = parseInt(minRating, 10);
-            if (isNaN(minR) || minR < 1 || minR > 20) {
-                return res.status(400).json({ message: 'Invalid minRating. Must be between 1 and 20.' });
-            }
-            sql += ` AND userRating >= ?`;
-            params.push(minR);
-        }
-         if (maxRating) {
-            const maxR = parseInt(maxRating, 10);
-             if (isNaN(maxR) || maxR < 1 || maxR > 20) {
-                return res.status(400).json({ message: 'Invalid maxRating. Must be between 1 and 20.' });
-            }
-            sql += ` AND userRating <= ?`;
-            params.push(maxR);
-        }
-        // Check min <= max
-        if (minRating && maxRating && parseInt(minRating) > parseInt(maxRating)) {
-            return res.status(400).json({ message: 'minRating cannot be greater than maxRating.' });
+        if (favoriteFilter !== undefined) { // Check if the filter was provided
+            sql += ` AND isFavorite = ?`;
+            params.push(favoriteFilter ? 1 : 0);
         }
 
-        sql += ` ORDER BY addedAt DESC`;
+        // Apply Sorting (Add more options as needed)
+        const validSorts = {
+             addedAt: 'addedAt DESC',
+             updatedAt: 'updatedAt DESC',
+             completedAt: 'completedAt DESC', // Sort by completion date
+             rating: 'userRating DESC',
+             title: 'lower(title) ASC' // Case-insensitive title sort
+        };
+        if (sortBy && validSorts[sortBy]) {
+            sql += ` ORDER BY ${validSorts[sortBy]}`;
+        } else {
+            sql += ` ORDER BY updatedAt DESC`; // Default sort
+        }
 
-        const items = await db.all(sql, params);
+        // Apply Limit
+        if (limit && !isNaN(parseInt(limit, 10))) {
+             sql += ` LIMIT ?`;
+             params.push(parseInt(limit, 10));
+        }
+
+        const items = await db.allAsync(sql, params);
         res.status(200).json(items);
 
     } catch (error) {
-        console.error("Get Library Error:", error);
+        console.error(`Get Library Error (User ${targetUserId}):`, error);
         res.status(500).json({ message: error.message || 'Failed to retrieve library items.' });
     }
 });
 
-// --- Add Item ---
+// --- Get Specific Library Item (by external mediaId and type) ---
+router.get('/item/:mediaType/:mediaId', async (req, res) => {
+    const userId = req.userId;
+    const { mediaType, mediaId } = req.params;
+
+    if (!mediaType || !mediaId || !VALID_MEDIA_TYPES.includes(mediaType)) {
+        return res.status(400).json({ message: 'Valid mediaType and mediaId are required.' });
+    }
+
+    try {
+        const sql = `SELECT * FROM library_items WHERE userId = ? AND mediaType = ? AND mediaId = ?`;
+        const item = await db.getAsync(sql, [userId, mediaType, mediaId]);
+
+        if (!item) {
+            return res.status(404).json({ message: 'Item not found in your library.' });
+        }
+        res.status(200).json(item);
+    } catch (error) {
+        console.error(`Get Specific Library Item Error (User ${userId}, ${mediaType}/${mediaId}):`, error);
+        res.status(500).json({ message: error.message || 'Failed to retrieve library item.' });
+    }
+});
+
+
+// --- Add Item to Library ---
 router.post('/', async (req, res) => {
     const userId = req.userId;
     const {
-        mediaType, mediaId, title, imageUrl, apiDescription,
-        userDescription, userRating, userStatus
+        mediaType, mediaId, title, imageUrl, releaseYear, // Core details from search/details
+        userStatus, userRating, userNotes, isFavorite // User interaction fields
      } = req.body;
 
-    // Validation
-    if (!mediaType || !mediaId || !title || !userStatus) {
-        return res.status(400).json({ message: 'mediaType, mediaId, title, and userStatus are required.' });
-    }
-    if (!VALID_MEDIA_TYPES.includes(mediaType)) {
-         return res.status(400).json({ message: `Invalid mediaType.` });
-    }
-    if (!isValidStatusForType(userStatus, mediaType)) {
-        const valid = getValidStatusesForType(mediaType);
-        return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${valid.join(', ')}.` });
-    }
-    let ratingValue = null;
-    if (userRating !== undefined && userRating !== null && userRating !== '') {
-        ratingValue = parseInt(userRating, 10);
-        if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-            return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20.' });
-        }
-    }
-
-    const watchedAt = COMPLETED_STATUSES.includes(userStatus.toLowerCase()) ? new Date().toISOString() : null;
-
-    const insertSql = `
-        INSERT INTO library_items
-            (userId, mediaType, mediaId, title, imageUrl, apiDescription,
-             userDescription, userRating, userStatus, watchedAt, addedAt, updatedAt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `;
-    const params = [
-        userId, mediaType, mediaId, title, imageUrl || null, apiDescription || null,
-        userDescription || null, ratingValue, userStatus.toLowerCase(), watchedAt
-    ];
-
     try {
-        const result = await db.run(insertSql, params);
-        // Fetch and return the newly added item
-        const newItem = await db.get(`SELECT * FROM library_items WHERE id = ?`, [result.lastID]);
+        // Validation
+        if (!mediaType || !mediaId || !title ) {
+            return res.status(400).json({ message: 'mediaType, mediaId, and title are required.' });
+        }
+        if (!VALID_MEDIA_TYPES.includes(mediaType)) {
+             return res.status(400).json({ message: `Invalid mediaType.` });
+        }
+
+        const status = userStatus ? validateStatus(userStatus) : 'planned'; // Default to 'planned' if not provided
+        const rating = parseAndValidateRating(userRating); // Validates or returns null
+        const favorite = parseBoolean(isFavorite) || false; // Default to false
+
+        // Set completedAt timestamp if status is completed
+        const completedAt = (status === COMPLETED_STATUS) ? new Date().toISOString() : null;
+        const year = releaseYear ? parseInt(releaseYear, 10) : null;
+        if (releaseYear && isNaN(year)){
+             console.warn(`Invalid releaseYear format received: ${releaseYear}`);
+             // Decide whether to reject or just store null
+        }
+
+
+        const insertSql = `
+            INSERT INTO library_items
+                (userId, mediaType, mediaId, title, imageUrl, releaseYear,
+                 userStatus, userRating, userNotes, isFavorite, completedAt, addedAt, updatedAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        `;
+        const params = [
+            userId, mediaType, mediaId, title, imageUrl || null, !isNaN(year) ? year : null,
+            status, rating, userNotes || null, favorite ? 1 : 0, completedAt
+        ];
+
+        const result = await db.runAsync(insertSql, params);
+        const newItem = await db.getAsync(`SELECT * FROM library_items WHERE id = ?`, [result.lastID]);
         res.status(201).json(newItem);
 
     } catch (error) {
         console.error("Add Library Item Error:", error);
-        // Handle UNIQUE constraint error from dbUtils
         if (error.message.includes('UNIQUE constraint failed')) {
              return res.status(409).json({ message: 'This item is already in your library.' });
+        }
+        // Return validation errors directly
+         if (error.message.startsWith('Invalid userRating') || error.message.startsWith('Invalid userStatus')) {
+            return res.status(400).json({ message: error.message });
         }
         res.status(500).json({ message: error.message || 'Failed to add item to library.' });
     }
 });
 
-// --- Edit Item ---
+// --- Update Library Item (by internal library item ID) ---
 router.put('/:id', async (req, res) => {
     const userId = req.userId;
     const itemId = req.params.id;
-    const { userDescription, userRating, userStatus } = req.body;
+    const { userStatus, userRating, userNotes, isFavorite } = req.body;
 
-    if (userDescription === undefined && userRating === undefined && userStatus === undefined) {
+    // Check if at least one field is provided
+    if (userStatus === undefined && userRating === undefined && userNotes === undefined && isFavorite === undefined) {
         return res.status(400).json({ message: 'No fields provided for update.' });
     }
 
     try {
-        // Fetch the item first to get its type and current status
-        const item = await db.get(`SELECT mediaType, userStatus as currentStatus FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
+        // Fetch the item first to check ownership and get current status
+        const item = await db.getAsync(`SELECT userStatus as currentStatus, completedAt as currentCompletedAt FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
         if (!item) {
             return res.status(404).json({ message: 'Library item not found or not owned by user.' });
         }
 
-        const { mediaType, currentStatus } = item;
+        const { currentStatus, currentCompletedAt } = item;
         const updates = [];
         const params = [];
         let newDbStatus = null;
+        let newCompletedAt = currentCompletedAt; // Keep existing unless changed
 
         // Validate and add fields to update
         if (userStatus !== undefined) {
-            const status = userStatus.toLowerCase();
-             if (!isValidStatusForType(status, mediaType)) {
-                 const valid = getValidStatusesForType(mediaType);
-                 return res.status(400).json({ message: `Invalid userStatus for ${mediaType}. Must be one of: ${valid.join(', ')}.` });
-             }
+             const status = validateStatus(userStatus);
              updates.push(`userStatus = ?`);
              params.push(status);
-             newDbStatus = status; // Store for watchedAt logic
+             newDbStatus = status; // Store for completedAt logic
 
-             // Handle watchedAt timestamp
-             const isNowCompleted = COMPLETED_STATUSES.includes(newDbStatus);
-             const wasCompleted = COMPLETED_STATUSES.includes(currentStatus);
-             if (isNowCompleted && !wasCompleted) {
-                updates.push(`watchedAt = datetime('now')`);
-             } else if (!isNowCompleted && wasCompleted) {
-                 updates.push(`watchedAt = NULL`);
+             // Handle completedAt timestamp
+             const isNowCompleted = (newDbStatus === COMPLETED_STATUS);
+             if (isNowCompleted && !currentCompletedAt) { // If becoming completed
+                newCompletedAt = new Date().toISOString();
+                updates.push(`completedAt = ?`);
+                params.push(newCompletedAt);
+             } else if (!isNowCompleted && currentCompletedAt) { // If changing away from completed
+                 newCompletedAt = null;
+                 updates.push(`completedAt = NULL`);
+                 // params don't need update for NULL here
              }
-        }
-
-        if (userDescription !== undefined) {
-            updates.push(`userDescription = ?`);
-            params.push(userDescription); // Allow empty string or null
         }
 
         if (userRating !== undefined) {
-             let ratingValue = null;
-             // Allow setting to null or empty string means null
-             if (userRating !== null && userRating !== '') {
-                 ratingValue = parseInt(userRating, 10);
-                 if (isNaN(ratingValue) || ratingValue < 1 || ratingValue > 20) {
-                     return res.status(400).json({ message: 'Invalid userRating. Must be an integer between 1 and 20, or null/empty.' });
-                 }
-             }
+             const rating = parseAndValidateRating(userRating); // Validates or returns null
              updates.push(`userRating = ?`);
-             params.push(ratingValue);
+             params.push(rating);
         }
 
+         if (userNotes !== undefined) {
+            updates.push(`userNotes = ?`);
+            params.push(userNotes); // Allow empty string or null
+        }
+
+        const favorite = parseBoolean(isFavorite); // Returns true/false/undefined
+        if (favorite !== undefined) {
+             updates.push(`isFavorite = ?`);
+             params.push(favorite ? 1 : 0);
+        }
+
+
         if (updates.length === 0) {
-            // Should not happen due to initial check, but safe fallback
              return res.status(400).json({ message: 'No valid update fields provided.' });
         }
 
@@ -205,42 +255,105 @@ router.put('/:id', async (req, res) => {
         const updateSql = `UPDATE library_items SET ${updates.join(', ')} WHERE id = ? AND userId = ?`;
         params.push(itemId, userId);
 
-        const result = await db.run(updateSql, params);
+        const result = await db.runAsync(updateSql, params);
 
         if (result.changes === 0) {
-            // Should be rare given the initial fetch, maybe concurrent modification?
-            return res.status(404).json({ message: 'Item not found or no changes applied.' });
+            // This might happen if the data sent was the same as the existing data
+            // Fetch and return current item state as confirmation
+             const currentItem = await db.getAsync(`SELECT * FROM library_items WHERE id = ?`, [itemId]);
+            return res.status(200).json(currentItem);
+            // return res.status(404).json({ message: 'Item not found or no changes needed.' });
         }
 
         // Fetch and return the updated item
-        const updatedItem = await db.get(`SELECT * FROM library_items WHERE id = ?`, [itemId]);
+        const updatedItem = await db.getAsync(`SELECT * FROM library_items WHERE id = ?`, [itemId]);
         res.status(200).json(updatedItem);
 
     } catch (error) {
         console.error("Update Library Item Error:", error);
+        // Return validation errors directly
+         if (error.message.startsWith('Invalid userRating') || error.message.startsWith('Invalid userStatus')) {
+            return res.status(400).json({ message: error.message });
+        }
         res.status(500).json({ message: error.message || 'Failed to update library item.' });
     }
 });
 
-// --- Delete Item ---
+// --- Delete Item from Library ---
 router.delete('/:id', async (req, res) => {
     const userId = req.userId;
     const itemId = req.params.id;
 
     try {
-        const result = await db.run(`DELETE FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
+        // Optional: Check if item is in any lists before deleting? Or rely on CASCADE delete?
+        // For now, rely on CASCADE in user_list_items table.
+
+        const result = await db.runAsync(`DELETE FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
 
         if (result.changes === 0) {
             return res.status(404).json({ message: 'Library item not found or not owned by user.' });
         }
-        // Prefer 200 with message or 204 No Content
-        res.status(200).json({ message: 'Library item deleted successfully.' });
-        // res.status(204).send();
+        res.status(200).json({ message: 'Library item deleted successfully.' }); // 200 with message is often preferred over 204
 
     } catch (error) {
         console.error("Delete Library Item Error:", error);
         res.status(500).json({ message: error.message || 'Failed to delete library item.' });
     }
 });
+
+
+// --- Get Library Stats (for profile page) ---
+router.get('/stats/:userId', async (req, res) => {
+    const requestingUserId = req.userId;
+    const targetUserId = parseInt(req.params.userId, 10);
+
+     if (isNaN(targetUserId)) {
+        return res.status(400).json({ message: 'Invalid userId provided.' });
+    }
+
+    // Permission check (basic - allow own stats, maybe public later)
+    if (requestingUserId !== targetUserId) {
+        // Could check target user's profile privacy here if needed
+        // return res.status(403).json({ message: 'Cannot access stats for another user.' });
+    }
+
+
+    try {
+        // Calculate Average Score (only for items rated by the user)
+        const avgScoreResult = await db.getAsync(
+            `SELECT AVG(userRating) as averageScore FROM library_items WHERE userId = ? AND userRating IS NOT NULL`,
+            [targetUserId]
+        );
+        const averageScore = avgScoreResult?.averageScore ? parseFloat(avgScoreResult.averageScore.toFixed(1)) : null; // 1 decimal place
+
+        // Count Completed Items
+        const countResult = await db.getAsync(
+            `SELECT COUNT(*) as countCompleted FROM library_items WHERE userId = ? AND userStatus = ?`,
+            [targetUserId, COMPLETED_STATUS]
+        );
+        const countCompleted = countResult?.countCompleted || 0;
+
+         // Count Total Items in Library
+        const countTotalResult = await db.getAsync(
+            `SELECT COUNT(*) as countTotal FROM library_items WHERE userId = ?`,
+            [targetUserId]
+        );
+        const countTotal = countTotalResult?.countTotal || 0;
+
+
+        res.status(200).json({
+            userId: targetUserId,
+            averageScore: averageScore, // Average rating given (1-10)
+            countCompleted: countCompleted, // "Nb vues"
+            countTotal: countTotal, // Total items tracked
+            // Add more stats as needed (e.g., counts per type, per status)
+        });
+
+    } catch (error) {
+        console.error(`Get Library Stats Error (User ${targetUserId}):`, error);
+        res.status(500).json({ message: error.message || 'Failed to retrieve library stats.' });
+    }
+});
+
 
 module.exports = router;

@@ -1,0 +1,118 @@
+/* public/css/components/_swiper.css */
+/* Basic Swiper container adjustments */
+.swiper {
+    width: 100%;
+    padding: var(--space-sm) 0; /* Add padding for shadows/overflow */
+    position: relative;
+}
+
+.swiper-wrapper {
+    /* display: flex; /* Swiper handles this */
+    /* align-items: stretch; /* Make slides equal height if needed */
+}
+
+.swiper-slide {
+    width: auto; /* Allow slides to size based on content or CSS */
+    flex-shrink: 0;
+    height: auto; /* Allow slides to determine their height */
+    /* Ensure slides are block or flex containers if needed */
+    display: flex; /* Make slide a flex container */
+    justify-content: center; /* Center content if slide is wider */
+}
+
+/* Adjust slide width for specific carousels if needed */
+.media-swiper .swiper-slide {
+     width: 180px; /* Example width for media cards */
+}
+.cast-swiper .swiper-slide {
+    width: 100px; /* Example width for cast members */
+}
+.list-swiper .swiper-slide {
+     width: 250px; /* Example width for list cards */
+}
+
+/* Navigation Buttons */
+.swiper-button-prev,
+.swiper-button-next {
+    position: absolute;
+    top: 50%;
+    width: 40px; /* Adjust size */
+    height: 40px;
+    margin-top: -20px; /* Half of height */
+    z-index: 10;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-primary); /* Use theme color */
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    box-shadow: var(--shadow-md);
+    transition: opacity var(--transition-fast), background-color var(--transition-fast);
+    opacity: 0; /* Hidden by default */
+}
+.swiper:hover .swiper-button-prev,
+.swiper:hover .swiper-button-next {
+     opacity: 1; /* Show on hover */
+}
+
+
+.swiper-button-prev:hover,
+.swiper-button-next:hover {
+     background-color: rgba(255, 255, 255, 1);
+     color: var(--color-primary-dark);
+}
+
+.swiper-button-prev {
+    left: 5px;
+}
+.swiper-button-next {
+    right: 5px;
+}
+
+/* Use Swiper's built-in SVG icons or replace with custom ones */
+.swiper-button-prev::after,
+.swiper-button-next::after {
+    font-size: 1.2rem; /* Adjust icon size */
+    font-weight: bold;
+}
+
+/* Disabled state */
+.swiper-button-disabled {
+    opacity: 0 !important; /* Hide completely when disabled */
+    cursor: auto;
+    pointer-events: none;
+}
+
+/* Pagination */
+.swiper-pagination {
+    position: absolute;
+    bottom: -5px !important; /* Adjust position */
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto !important;
+}
+.swiper-pagination-bullet {
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-border);
+    opacity: 0.7;
+    transition: opacity var(--transition-fast), background-color var(--transition-fast);
+}
+.swiper-pagination-bullet-active {
+    background-color: var(--color-primary);
+    opacity: 1;
+}
+
+/* Responsive adjustments for buttons */
+@media (max-width: 600px) {
+    .swiper-button-prev,
+    .swiper-button-next {
+        display: none; /* Hide buttons on small screens maybe */
+    }
+    /* Adjust slide widths if needed */
+    .media-swiper .swiper-slide { width: 150px; }
+    .cast-swiper .swiper-slide { width: 80px; }
+    .list-swiper .swiper-slide { width: 200px; }
+
+}

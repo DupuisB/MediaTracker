@@ -1,55 +1,34 @@
 {{! views/partials/mediaCard.hbs }}
+{{! Simplified card for grids and horizontal lists }}
+
 {{#each items}}
-<div class="{{../cardClass}}" data-item-json="{{json this}}"> {{!-- Store item data --}}
-    <img src="{{defaultIfEmpty imageUrl '/images/placeholder.png'}}" alt="{{title}}" class="card-image" onerror="this.onerror=null; this.src='/images/placeholder.png';">
-    <div class="card-content">
-        <h3 class="card-title">{{title}}</h3>
-        <p class="card-meta">
-            <span class="tag tag-{{classify (defaultIfEmpty mediaType type)}}">{{defaultIfEmpty mediaType type}}</span>
-            {{#if releaseDate}}<span>Released: {{formatYear releaseDate}}</span>{{/if}}
-            {{#if publishedDate}}<span>Published: {{formatYear publishedDate}}</span>{{/if}} {{!-- For books --}}
-             {{#if authors}}<span>Author(s): {{join authors ", "}}</span>{{/if}}
-
-            {{!-- API Rating (from search or stored) --}}
-            {{#if rating}}<span>API Rating: {{rating}}/20</span>{{/if}}
-
-            {{#unless ../isSearchResult}} {{!-- Library item specific meta --}}
-                 <span class="tag tag-status-{{classify userStatus}}">Status: <strong>{{userStatus}}</strong></span>
-                 {{#if userRating}}<span>My Rating: {{userRating}}/20</span>{{/if}}
-                 {{#if addedAt}}<span>Added: {{formatDate addedAt}}</span>{{/if}}
-                 {{#if watchedAt}}<span>Completed: {{formatDate watchedAt}}</span>{{/if}}
-            {{/unless}}
-        </p>
-        <p class="card-description truncated">
-            {{#if ../isSearchResult}}
-                {{! Use description from search, fallback to apiDescription if structure differs }}
-                {{defaultIfEmpty description apiDescription}}
-            {{else}}
-                <strong>My Notes:</strong> {{defaultIfEmpty userDescription "None"}}
-            {{/if}}
-        </p>
-        {{#unless ../isSearchResult}}
-             {{#if apiDescription}}
-             <details class="api-desc-details"><summary>Original Description</summary><p>{{apiDescription}}</p></details>
+<div class="media-card {{statusOutlineClass userStatus}}" data-media-type="{{mediaType}}" data-media-id="{{mediaId}}">
+    <a href="/media/{{mediaType}}/{{mediaId}}" class="card-link" aria-label="View details for {{title}}">
+        <div class="card-image-container">
+            <img src="{{defaultIfEmpty imageUrl '/images/placeholder.png'}}" alt="{{title}} Poster" class="card-image" loading="lazy" onerror="this.onerror=null; this.src='/images/placeholder.png';">
+             {{!-- Optional: Add overlay/icons based on status or type --}}
+             {{#if userStatus}}
+                <span class="status-indicator status-{{userStatus}}">{{capitalize userStatus}}</span>
              {{/if}}
-        {{/unless}}
-
-        <div class="card-actions">
-            {{#if ../isSearchResult}}
-                 {{!-- Add button triggers modal via event delegation --}}
-                <button class="btn btn-primary btn-small action-add">Add to Library</button>
-            {{else}}
-                 {{!-- Edit/Delete buttons trigger actions via event delegation --}}
-                <button class="btn btn-secondary btn-small action-edit">Edit</button>
-                <button class="btn btn-danger btn-small action-delete">Delete</button>
-            {{/if}}
-             {{!-- Details button triggers modal via event delegation (even on library items) --}}
-             <button class="btn btn-secondary btn-small action-details">Details</button>
         </div>
-    </div>
+        <div class="card-info">
+            <h3 class="card-title">{{truncate title 50}}</h3>
+            <p class="card-subtitle">
+                 {{#if authors}}
+                    {{truncate (join authors ", ") 30}}
+                 {{else}}
+                     {{!-- Show type or year if no author --}}
+                     {{capitalize mediaType}}
+                 {{/if}}
+                 {{#if releaseYear}}
+                    <span class="card-year">({{releaseYear}})</span>
+                 {{/if}}
+            </p>
+        </div>
+    </a>
+     {{!-- Removed action buttons - Interaction is now clicking the card --}}
 </div>
 {{else}}
-    {{#unless ../hidePlaceholder}} {{!-- Allow hiding placeholder during loading --}}
-    <p class="placeholder-text">{{defaultIfEmpty ../placeholder "No items found."}}</p>
-    {{/unless}}
+    {{!-- No items placeholder (optional, handled by parent typically) --}}
+    {{!-- <p class="no-items">No items to display.</p> --}}
 {{/each}}

@@ -1,0 +1,66 @@
+{{! views/partials/userInteractionControls.hbs }}
+
+{{!-- Store core details needed for the "Add" action --}}
+<div class="user-interaction-controls"
+     data-library-item-id="{{item.libraryItemId}}"
+     data-media-type="{{item.mediaType}}"
+     data-media-id="{{item.mediaId}}"
+     data-title="{{item.title}}"
+     data-image-url="{{item.imageUrl}}"
+     data-release-year="{{item.releaseYear}}">
+     {{#if user}} {{!-- Outer #if user --}}
+        <form id="mediaInteractionForm">
+            {{!-- Status Dropdown --}}
+            <div class="interaction-group status-group">
+                 <label for="detailStatusSelect">My Status:</label>
+                 <select id="detailStatusSelect" name="userStatus">
+                    {{#unless item.isInLibrary}} {{!-- #unless --}}
+                        {{!-- Default options for adding --}}
+                        <option value="planned" selected>Planned</option>
+                        <option value="watching">Watching</option>
+                        <option value="completed">Completed</option>
+                        <option value="paused">Paused</option>
+                        <option value="dropped">Dropped</option>
+                    {{else}} {{!-- else for #unless --}}
+                        {{!-- Options selected based on current status for editing --}}
+                         <option value="planned" {{#if (eq item.userStatus 'planned')}}selected{{/if}}>Planned</option>
+                         <option value="watching" {{#if (eq item.userStatus 'watching')}}selected{{/if}}>Watching</option>
+                         <option value="completed" {{#if (eq item.userStatus 'completed')}}selected{{/if}}>Completed</option>
+                         <option value="paused" {{#if (eq item.userStatus 'paused')}}selected{{/if}}>Paused</option>
+                         <option value="dropped" {{#if (eq item.userStatus 'dropped')}}selected{{/if}}>Dropped</option>
+                      {{!-- No inner ifs to close here in the corrected version --}}
+                    {{/unless}} {{!-- Close #unless --}}
+                 </select>
+            </div>
+            {{!-- Rating Input --}}
+             <div class="interaction-group rating-group">
+                 <label for="detailRatingInput">My Rating:</label>
+                 <input type="number" id="detailRatingInput" name="userRating" min="1" max="10" placeholder="-" value="{{item.userRating}}">
+                 <span>/ 10</span>
+            </div>
+            {{!-- Favorite Checkbox --}}
+             <div class="interaction-group favorite-group">
+                 <label for="detailFavoriteToggle">Favorite:</label>
+                 <input type="checkbox" id="detailFavoriteToggle" name="isFavorite" value="true" {{#if item.isFavorite}}checked{{/if}}> {{!-- Single #if, no /if needed for attribute --}}
+             </div>
+             {{!-- Notes Textarea --}}
+              <div class="interaction-group notes-group">
+                 <label for="detailNotesInput">My Notes:</label>
+                 <textarea id="detailNotesInput" name="userNotes" rows="2" placeholder="Add notes...">{{item.userNotes}}</textarea>
+            </div>
+
+            {{!-- Action Buttons --}}
+            <div class="interaction-actions">
+                {{!-- Buttons' visibility controlled by updateInteractionControls JS --}}
+                <button type="button" class="btn btn-primary btn-small add-to-library-btn {{#if item.isInLibrary}}hidden{{/if}}">Add to Library</button>
+                <button type="submit" class="btn btn-primary btn-small {{#unless item.isInLibrary}}hidden{{/unless}}">Update</button>
+                <button type="button" class="btn btn-danger btn-small remove-from-library-btn {{#unless item.isInLibrary}}hidden{{/unless}}">Remove from Library</button>
+
+                <span id="interactionStatus" class="status-message hidden"></span>
+                <div id="interactionSpinner" class="spinner hidden"></div>
+            </div>
+        </form>
+    {{else}} {{!-- else for #if user --}}
+        <p><a href="/login">Login</a> to track this item.</p>
+    {{/if}} {{!-- Close #if user --}}
+</div>

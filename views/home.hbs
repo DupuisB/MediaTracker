@@ -1,18 +1,76 @@
-<section class="hero">
-    <h2>Organize Your Entertainment</h2>
-    <p>Keep track of movies, series, books, and video games you want to watch, read, or play.</p>
-    {{#if user}}
-        <a href="/library" class="btn btn-primary">Go to My Library</a>
-    {{else}}
-        <a href="/login" class="btn btn-primary">Get Started</a>
-    {{/if}}
-</section>
+{{! views/home.hbs }}
+{{#if homeError}}
+<div class="container error-message">{{homeError}}</div>
+{{/if}}
 
-<section class="features">
-    <h2>Features</h2>
-    <div class="feature-list">
-        <div class="feature-item">Icon 1: Search across multiple platforms.</div>
-        <div class="feature-item">Icon 2: Add items to your personal library.</div>
-        <div class="feature-item">Icon 3: Track your progress and ratings.</div>
+{{!-- Horizontal Navigation Bar --}}
+<nav class="horizontal-nav container">
+    {{!-- Use buttons or links to filter content (JS needed) or navigate --}}
+    <button class="nav-item active" data-filter="all">All</button>
+    <button class="nav-item" data-filter="movie">Movies</button>
+    <button class="nav-item" data-filter="series">Series</button>
+    <button class="nav-item" data-filter="book">Books</button>
+    <button class="nav-item" data-filter="video game">Video Games</button>
+</nav>
+
+{{!-- Hottest Section (Placeholder) --}}
+<section class="media-carousel-section container">
+    <h2 class="section-title">🔥 Hottest Right Now</h2>
+    <div class="swiper media-swiper">
+        <div class="swiper-wrapper">
+            {{#each hottest}}
+             <div class="swiper-slide">
+                {{> mediaCard items=(list this) }} {{!-- Pass single item as list --}}
+             </div>
+            {{/each}}
+        </div>
+        <div class="swiper-button-prev"></div>
+        <div class="swiper-button-next"></div>
+        {{!-- <div class="swiper-pagination"></div> --}}
     </div>
 </section>
+
+{{!-- In Your Watchlist Section --}}
+{{#if user}} {{!-- Only show if logged in --}}
+<section class="media-carousel-section container">
+    <h2 class="section-title">📑 In Your Watchlist (Planned)</h2>
+     {{#if watchlist.length}}
+    <div class="swiper media-swiper">
+        <div class="swiper-wrapper">
+             {{!-- Render watchlist items using mediaCard partial --}}
+             {{!-- The 'watchlist' variable comes from viewRoutes.js --}}
+            {{#each watchlist}}
+            <div class="swiper-slide">
+                 {{!-- Need to adapt watchlist data if structure differs from mediaCard expectation --}}
+                {{> mediaCard items=(list this) userStatus='planned' }} {{!-- Override status visually for this section --}}
+             </div>
+            {{/each}}
+        </div>
+         <div class="swiper-button-prev"></div>
+         <div class="swiper-button-next"></div>
+    </div>
+    {{else}}
+        <p class="placeholder-text">Your watchlist is empty. Search and add items!</p>
+    {{/if}}
+</section>
+{{/if}}
+
+
+{{!-- Recommendation Section (Placeholder) --}}
+<section class="media-carousel-section container">
+    <h2 class="section-title">✨ Recommendations For You</h2>
+     <div class="swiper media-swiper">
+        <div class="swiper-wrapper">
+            {{#each recommendations}}
+            <div class="swiper-slide">
+                 {{> mediaCard items=(list this) }}
+             </div>
+            {{/each}}
+        </div>
+        <div class="swiper-button-prev"></div>
+        <div class="swiper-button-next"></div>
+    </div>
+</section>
+
+{{!-- Helper function to wrap single item in list for partial --}}
+{{#*inline "list"}}[{{> (lookup . '0')}}] {{/inline}}

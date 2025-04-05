@@ -1,32 +1,41 @@
+/* public/css/components/_tags.css */
 .tag {
     display: inline-block;
     padding: var(--space-xs) var(--space-sm);
-    font-size: 0.75rem; /* Smaller font */
+    font-size: var(--font-size-xs);
     font-weight: var(--font-weight-semibold);
     border-radius: var(--border-radius-sm);
-    line-height: 1;
+    line-height: 1.2;
     text-transform: capitalize;
+    border: 1px solid transparent; /* Base border */
 }
 
-/* Base tag colors (can be overridden) */
+/* Default Tag Style */
 .tag {
-    background-color: var(--color-secondary);
+    background-color: #f1f5f9; /* Lighter gray */
     color: var(--color-text-light);
+    border-color: var(--color-border);
 }
 
 /* Type specific tags */
-.tag-movie { background-color: #e6f7ff; color: #096dd9; border: 1px solid #91d5ff;}
-.tag-series { background-color: #fffbe6; color: #d48806; border: 1px solid #ffe58f;}
-.tag-book { background-color: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f;}
-.tag-video-game { background-color: #fff0f6; color: #c41d7f; border: 1px solid #ffadd2;}
+.tag-movie { background-color: #e0f2fe; color: #0c4a6e; border-color: #7dd3fc;} /* Sky Blue */
+.tag-series { background-color: #fef9c3; color: #713f12; border-color: #fde047;} /* Amber */
+.tag-book { background-color: #dcfce7; color: #15803d; border-color: #86efac;} /* Green */
+.tag-video-game { background-color: #fce7f3; color: #831843; border-color: #f9a8d4;} /* Pink */
 
-/* Status specific tags */
-.tag-status-to-watch, .tag-status-to-read, .tag-status-to-play {
-    background-color: var(--color-secondary-dark); color: var(--color-text);
+/* Status specific tags (using text color more) */
+.tag-status-planned { color: var(--color-status-planned); border-color: currentColor; background-color: #fef2f2;}
+.tag-status-watching,
+.tag-status-reading,
+.tag-status-playing { color: var(--color-status-watching); border-color: currentColor; background-color: #eff6ff; }
+.tag-status-completed { color: var(--color-status-completed); border-color: currentColor; background-color: #f0fdf4; }
+.tag-status-paused { color: var(--color-status-paused); border-color: currentColor; background-color: #fefce8; }
+.tag-status-dropped { color: var(--color-status-dropped); border-color: currentColor; background-color: #f1f5f9; }
+
+/* Rating Tag */
+.tag-rating {
+    background-color: var(--color-accent);
+    color: var(--color-text-inverse);
+    border: none;
 }
-.tag-status-watching, .tag-status-reading, .tag-status-playing {
-    background-color: #fff1b8; color: #d46b08; border: 1px solid #ffd591; /* Orange/Yellow */
-}
-.tag-status-watched, .tag-status-read, .tag-status-played {
-    background-color: #e6fffb; color: #08979c; border: 1px solid #87e8de; /* Teal/Green */
-}
+.tag-rating .icon { margin-right: var(--space-xs); }
