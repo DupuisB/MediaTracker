@@ -21,6 +21,7 @@ yarn-debug.log*
 # --- SQLite Database ---
 # Ignore the local SQLite database file
 watchlist.db
+watchlist_v2.db
 *.sqlite
 *.sqlite3
 # Ignore database journal files (temporary)
