@@ -23,14 +23,46 @@
     padding-bottom: var(--space-sm);
 }
 
+/* --- Styles moved from layout/_grid.css --- */
 .results-grid {
     display: grid;
-    /* Responsive columns */
+    /* Responsive columns adjusted slightly for search results */
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: var(--space-lg);
+    margin-top: var(--space-md); /* Use margin from category title */
 }
 
-/* Adjust card styles slightly for grid */
+/* Loading state placeholder text */
+.results-grid.loading .placeholder-text {
+    color: var(--color-text-light);
+    font-style: normal; /* Not italic while loading */
+}
+
+/* General placeholder (used for loading/error/no-items) within grid */
+.results-grid .placeholder-text {
+    grid-column: 1 / -1; /* Span full grid width */
+    text-align: center;
+    color: var(--color-text-lighter);
+    font-style: italic;
+    padding: var(--space-xl) var(--space-md);
+    background-color: var(--color-bg-card); /* Match card background */
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--color-border);
+    margin-top: 0; /* Reset margin if used directly in grid */
+}
+
+.results-grid .placeholder-text.error {
+    color: var(--color-danger);
+    font-weight: var(--font-weight-medium);
+    font-style: normal;
+    background-color: #feefee;
+    border-color: var(--color-danger);
+}
+/* --- End moved styles --- */
+
+
+/* Adjust card styles specifically for the results grid */
 .results-grid .media-card .card-title {
     font-size: 0.9rem; /* Smaller title in grid */
 }
@@ -41,12 +73,16 @@
     padding: var(--space-xs) var(--space-sm) var(--space-sm);
 }
 
+/* Specific placeholder for "No Results Found" message */
 .placeholder-text.no-results {
+    grid-column: 1 / -1; /* Ensure it spans */
     margin-top: var(--space-xl);
     background-color: var(--color-bg-card);
     border-radius: var(--border-radius-md);
     padding: var(--space-xl);
     box-shadow: var(--shadow-sm);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
 }
 
 
