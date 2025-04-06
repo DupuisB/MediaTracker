@@ -2,34 +2,44 @@
 <div class="search-results-page container">
     {{#if query}}
         <h1 class="search-title">Search Results for: <strong>"{{query}}"</strong></h1>
+
+        {{!-- Add Horizontal Navigation Bar --}}
+        <nav class="horizontal-nav container search-nav"> {{!-- Added 'search-nav' class --}}
+            <button class="nav-item active" data-filter="all">All</button> {{!-- Default to All --}}
+            {{#each results}}
+                {{#if this.length}} {{!-- Only create tab if category has results --}}
+                     {{!-- Set active class based on initial search type if passed, otherwise handled by JS --}}
+                     <button class="nav-item" data-filter="{{@key}}">
+                         {{#if (eq @key 'video game')}}Video Games{{else}}{{capitalize @key}}{{/if}} {{!-- Display name --}}
+                     </button>
+                {{/if}}
+            {{/each}}
+        </nav>
+
+        {{!-- Results Area --}}
+        <div id="search-results-area">
+            {{#each results}}
+                {{#if this.length}}
+                    {{!-- Wrap each category grid in a container with data-type attribute --}}
+                    <section class="results-category" data-category="{{@key}}">
+                        {{!-- Title is now optional or handled differently --}}
+                        {{!-- <h2 class="category-title">{{capitalize @key}}</h2> --}}
+                        <div class="results-grid">
+                             {{!-- Render media cards for this category --}}
+                             {{> mediaCard items=this cardClass=(concat "result-" @key) }}
+                        </div>
+                    </section>
+                {{/if}}
+            {{/each}}
+
+            {{!-- Handle Case Where No Results Found Across All Categories --}}
+            {{#unless (or results.movie.length results.series.length results.book.length results.video_game.length)}}
+                 <p class="placeholder-text no-results">No results found for "{{query}}". Try a different search term.</p>
+            {{/unless}}
+        </div>
+
     {{else}}
          <h1 class="search-title">Search</h1>
          <p>Please enter a search term in the header search bar.</p>
-    {{/if}}
-
-    {{#if query}} {{!-- Only show results sections if query exists --}}
-        {{#each results}} {{!-- Iterate through categories (movie, series, book, video game) --}}
-            {{#if this.length}} {{!-- Only show section if it has results --}}
-                <section class="results-category">
-                    <h2 class="category-title">{{capitalize @key}}</h2>
-                     {{#if (eq @key 'video game')}}<h2 class="category-title">Video Games</h2>{{/if}} {{!-- Fix key display --}}
-
-                    <div class="results-grid">
-                         {{!-- Render media cards for this category --}}
-                         {{> mediaCard items=this cardClass=(concat "result-" @key) }}
-                    </div>
-                     {{!-- Placeholder for Load More/Pagination --}}
-                     {{!-- <div class="pagination-controls text-center">
-                         <button class="btn btn-secondary load-more-btn" data-category="{{@key}}" data-page="1">Load More {{capitalize @key}}s</button>
-                     </div> --}}
-                 </section>
-            {{/if}}
-        {{/each}}
-
-        {{!-- Handle Case Where No Results Found Across All Categories --}}
-        {{#unless (or results.movie.length results.series.length results.book.length results.video_game.length)}}
-             <p class="placeholder-text no-results">No results found for "{{query}}". Try a different search term.</p>
-        {{/unless}}
-
     {{/if}}
 </div>

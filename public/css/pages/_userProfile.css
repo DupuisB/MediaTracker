@@ -1,7 +1,8 @@
 /* public/css/pages/_userProfile.css */
 
 .profile-page {
-    /* Container provides padding */
+    padding-top: var(--space-lg); /* Space for fixed header */
+    background-color: var(--color-bg-page); /* Page background */
 }
 
 .profile-header {
@@ -12,8 +13,8 @@
 
 .profile-banner {
     height: 150px; /* Adjust banner height */
-    background-color: var(--color-border); /* Placeholder */
-    background-image: linear-gradient(to right, var(--color-primary), var(--color-accent)); /* Example gradient */
+    background-color: var(--color-border);
+    background-image: linear-gradient(to right, var(--color-primary), var(--color-accent));
     background-size: cover;
     background-position: center;
 }
@@ -22,7 +23,7 @@
     display: flex;
     align-items: flex-end; /* Align items bottom */
     padding: 0 var(--space-lg) var(--space-lg);
-    margin-top: -60px; /* Pull content up over banner */
+    margin-top: -50px; /* Pull content up over banner */
     position: relative;
     gap: var(--space-lg);
 }
@@ -99,11 +100,7 @@
 /* Sections (Last Seen, Favorites, Lists) */
 .profile-page .media-carousel-section {
      margin-bottom: var(--space-xl);
-     /* Optional: Use card styling for sections */
-     /* background-color: var(--color-bg-card); */
-     /* padding: var(--space-lg); */
-     /* border-radius: var(--border-radius-md); */
-     /* box-shadow: var(--shadow-sm); */
+     background-color: var(--color-bg-card);
 }
 .profile-page .section-title {
     font-size: var(--font-size-h3);

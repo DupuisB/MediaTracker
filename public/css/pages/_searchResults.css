@@ -61,6 +61,15 @@
 }
 /* --- End moved styles --- */
 
+.search-nav {
+    margin-bottom: var(--space-xl); /* Space between nav and results */
+}
+
+/* Ensure sections are displayed correctly by default before JS hides them */
+.results-category {
+    display: block; /* Or 'grid' if the section itself is a grid container */
+    margin-bottom: var(--space-xl); /* Maintain spacing between visible categories */
+}
 
 /* Adjust card styles specifically for the results grid */
 .results-grid .media-card .card-title {
