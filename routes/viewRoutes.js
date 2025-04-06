@@ -14,49 +14,90 @@ router.use(checkAuthStatus);
 // Helper to build API URL
 const getApiUrl = (req) => `${req.protocol}://${req.get('host')}/api`;
 
+// --- TMDB Setup ---
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+// Helper to safely extract year
+const getYear = (dateString) => {
+    if (!dateString) return null;
+    try {
+        return new Date(dateString).getFullYear();
+    } catch (e) {
+        const yearMatch = dateString.match(/\d{4}/); // Try matching YYYY
+        return yearMatch ? parseInt(yearMatch[0], 10) : null;
+    }
+};
+
+// Helper function to map TMDB movie data to our card structure
+const mapTmdbToCardData = (item) => ({
+    mediaId: item.id.toString(),
+    mediaType: 'movie', // Explicitly set type
+    title: item.title,
+    imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : '/images/placeholder.png', // Card image size
+    releaseYear: getYear(item.release_date),
+    // Add other fields if needed by the card partial in the future
+});
+
 // --- Public Routes ---
 
-// Homepage (Refactored)
+// Homepage (Refactored with TMDB Trending)
 router.get('/', async (req, res, next) => {
-    try {
-        let watchlistItems = [];
-        if (res.locals.user) {
+    let watchlistItems = [];
+    let trendingMovies = [];
+    let homeError = null; // Initialize error message
+
+    // 1. Fetch User's Watchlist (Planned Items) if logged in
+    if (res.locals.user) {
+        try {
             const apiUrl = getApiUrl(req);
-            // Fetch items with status 'planned' for the watchlist
             const response = await axios.get(`${apiUrl}/library?userStatus=planned`, {
                 headers: { Cookie: req.headers.cookie } // Forward cookie for auth
             });
             watchlistItems = response.data;
+        } catch (error) {
+            console.error("Homepage Watchlist Fetch Error:", error.response?.data || error.message);
+            homeError = "Could not load your watchlist."; // Set error message but continue
         }
-        // Placeholder data for Hottest/Recommendations
-        const placeholderItems = Array(5).fill({
-             title: "Placeholder",
-             imageUrl: "/images/placeholder.png",
-             mediaType: "movie",
-             mediaId: "0",
-             releaseYear: new Date().getFullYear()
-        });
+    }
 
+    // 2. Fetch Trending Movies from TMDB
+    if (TMDB_API_KEY) {
+        try {
+            const trendingUrl = `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&language=en-US`;
+            const trendingResponse = await axios.get(trendingUrl);
+            // Take top 10-12 trending movies and map them
+            trendingMovies = trendingResponse.data.results.slice(0, 12).map(mapTmdbToCardData);
+        } catch (error) {
+            console.error("Homepage TMDB Trending Fetch Error:", error.response?.data || error.message);
+            // Set error message if trending fetch fails, but keep placeholders if watchlist also failed
+            homeError = homeError ? `${homeError} Also failed to load trending movies.` : "Could not load trending movies.";
+            // Fallback to empty array if fetch fails
+            trendingMovies = [];
+        }
+    } else {
+        console.warn("TMDB_API_KEY missing. Cannot fetch trending movies for homepage.");
+        homeError = homeError ? `${homeError} Also missing TMDB API Key for trending.` : "Trending movies unavailable (missing API key).";
+        trendingMovies = []; // Use empty array if key is missing
+    }
+
+    // 3. Render the page
+    try {
         res.render('home', {
             pageTitle: 'Home',
-            hottest: placeholderItems, // Placeholder
+            // Use trending movies for both sections if available, otherwise empty array
+            hottest: trendingMovies.length > 0 ? trendingMovies : [],
             watchlist: watchlistItems, // User's actual watchlist ('planned' status)
-            recommendations: placeholderItems, // Placeholder
+            recommendations: trendingMovies.length > 0 ? trendingMovies : [],
+            homeError: homeError, // Pass any accumulated errors
             // user is already in res.locals
         });
-    } catch (error) {
-        console.error("Homepage Error:", error.response?.data || error.message);
-        // Don't fail the whole page if watchlist fetch fails, show empty
-         res.render('home', {
-            pageTitle: 'Home',
-            hottest: Array(5).fill({ title: "Placeholder", imageUrl: "/images/placeholder.png", mediaType: "movie", mediaId: "0", releaseYear: new Date().getFullYear()}),
-            watchlist: [], // Empty watchlist on error
-            recommendations: Array(5).fill({ title: "Placeholder", imageUrl: "/images/placeholder.png", mediaType: "movie", mediaId: "0", releaseYear: new Date().getFullYear()}),
-            homeError: "Could not load your watchlist."
-        });
-        // Or pass to generic error handler: next(error);
+    } catch (renderError) {
+         console.error("Homepage Render Error:", renderError);
+         next(renderError); // Pass rendering errors to the main error handler
     }
 });
+
 
 // About Page (Simple, unchanged)
 router.get('/about', (req, res) => {
@@ -77,7 +118,7 @@ router.get('/login', (req, res) => {
 
 // --- Protected Routes ---
 
-// Media Detail Page (New)
+// Media Detail Page (New) - Keep as is
 router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) => {
     const { mediaType, mediaId } = req.params;
     const userId = res.locals.user.id;
@@ -158,7 +199,7 @@ router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) =>
     }
 });
 
-// Search Results Page (New)
+// Search Results Page (New) - Keep as is
 router.get('/search', requireLogin, async (req, res, next) => {
     const query = req.query.q || '';
     const apiUrl = getApiUrl(req);
@@ -191,7 +232,9 @@ router.get('/search', requireLogin, async (req, res, next) => {
         // Organize results by type
         const categorizedResults = {};
         searchResultsArray.forEach(result => {
-            categorizedResults[result.type] = result.data;
+            // Map 'video game' results to 'video_game' key if template expects that
+            const key = result.type === 'video game' ? 'video_game' : result.type;
+            categorizedResults[key] = result.data;
         });
 
         res.render('searchResults', {
@@ -207,11 +250,11 @@ router.get('/search', requireLogin, async (req, res, next) => {
     }
 });
 
-// User Profile Page (New - Basic Implementation)
+
+// User Profile Page (New - Basic Implementation) - Keep as is
 router.get('/profile', requireLogin, async (req, res, next) => { // Route for logged-in user's own profile
      await renderProfilePage(req, res, next, res.locals.user.id); // Call helper with logged-in user's ID
 });
-
 router.get('/profile/:username', requireLogin, async (req, res, next) => {
     try {
         // Find user ID by username (case-insensitive)
@@ -224,8 +267,7 @@ router.get('/profile/:username', requireLogin, async (req, res, next) => {
         next(error);
     }
 });
-
-// Helper function to render profile page (to avoid code duplication)
+// Helper function to render profile page (to avoid code duplication) - Keep as is
 async function renderProfilePage(req, res, next, profileUserId) {
      const loggedInUserId = res.locals.user.id;
      const isOwnProfile = profileUserId === loggedInUserId;
@@ -280,8 +322,7 @@ async function renderProfilePage(req, res, next, profileUserId) {
      }
 }
 
-
-// User Lists Overview Page (New)
+// User Lists Overview Page (New) - Keep as is
 router.get('/lists', requireLogin, async (req, res, next) => {
     const userId = req.locals.user.id;
     const apiUrl = getApiUrl(req);
@@ -307,7 +348,7 @@ router.get('/lists', requireLogin, async (req, res, next) => {
     }
 });
 
-// List Detail Page (New)
+// List Detail Page (New) - Keep as is
 router.get('/lists/:listId', requireLogin, async (req, res, next) => {
     const listId = req.params.listId;
     const userId = res.locals.user.id;
@@ -348,14 +389,16 @@ router.get('/lists/:listId', requireLogin, async (req, res, next) => {
 });
 
 
-// --- Route for Client-Side Handlebars Partials ---
+// --- Route for Client-Side Handlebars Partials --- - Keep as is
 // Keep this, but update allowed partials
 const ALLOWED_PARTIALS = new Set([
     'mediaCard', // Keep
     'itemFormModal', // Keep for add/edit actions
-    'mediaDetailUserInteraction', // New partial for interaction controls on detail page?
+    'userInteractionControls', // Updated name
     'listSummaryRow', // New
     'listItemRow', // New
+    'loginForm', // For potential future use?
+    'registerForm', // For potential future use?
     // Add others as needed
 ]);
 const partialsDir = path.join(__dirname, '../views/partials');
@@ -364,6 +407,7 @@ router.get('/templates/:templateName', requireLogin, async (req, res) => {
     const templateName = req.params.templateName;
 
     if (!ALLOWED_PARTIALS.has(templateName)) {
+        console.warn(`Template request blocked: ${templateName}`); // Log blocked attempts
         return res.status(404).send('Template not found or not allowed.');
     }
     const filePath = path.join(partialsDir, `${templateName}.hbs`);

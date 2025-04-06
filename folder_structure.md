@@ -54,8 +54,9 @@
             - modules/
                 - api.js
                 - authHandlers.js
+                - libraryHandlers.js
                 - listHandlers.js
-                - porfileHandlers.js
+                - profileHandlers.js
                 - swiperSetup.js
                 - templates.js
                 - ui.js
@@ -3157,6 +3158,146 @@ export { apiRequest };
 ### authHandlers.js
 
 ```js
+// public/js/modules/authHandlers.js
+import { apiRequest } from './api.js';
+import { showStatusMessage, showSpinner } from './ui.js';
+
+/**
+ * Handles the login form submission.
+ * @param {Event} event - The form submission event.
+ */
+async function handleLogin(event) {
+    event.preventDefault();
+    console.log("handleLogin executed");
+    const form = event.target;
+    const username = form.username.value.trim();
+    const password = form.password.value.trim();
+    const errorEl = document.getElementById('loginError');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const spinnerId = 'loginSpinner';
+
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+    if (submitButton) submitButton.disabled = true;
+    showSpinner(spinnerId, true);
+
+    if (!username || !password) {
+       if(errorEl){ errorEl.textContent = 'Username and password required.'; errorEl.classList.remove('hidden'); }
+       if (submitButton) submitButton.disabled = false;
+       showSpinner(spinnerId, false);
+       return;
+    }
+
+    try {
+        const result = await apiRequest('/auth/login', 'POST', { username, password });
+        if (result && result.user) {
+            window.location.href = '/'; // Redirect on success
+        } else {
+            throw new Error("Login response missing user data.");
+        }
+    } catch (error) {
+        const message = error.data?.message || error.message || 'Login failed.';
+        if(errorEl){ errorEl.textContent = message; errorEl.classList.remove('hidden'); }
+        else { showStatusMessage('globalStatus', message, 'error'); }
+        if (submitButton) submitButton.disabled = false;
+        showSpinner(spinnerId, false);
+    }
+}
+
+/**
+ * Handles the registration form submission.
+ * @param {Event} event - The form submission event.
+ */
+async function handleRegister(event) {
+    event.preventDefault();
+    console.log("handleRegister executed");
+    const form = event.target;
+    const username = form.username.value.trim();
+    const password = form.password.value.trim();
+    const errorEl = document.getElementById('registerError');
+    const messageEl = document.getElementById('registerMessage');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const spinnerId = 'registerSpinner';
+
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+    if (messageEl) { messageEl.textContent = ''; messageEl.classList.add('hidden'); }
+    if (submitButton) submitButton.disabled = true;
+    showSpinner(spinnerId, true);
+
+    if (!username || !password) {
+         if(errorEl){ errorEl.textContent = 'Username and password required.'; errorEl.classList.remove('hidden'); }
+          if (submitButton) submitButton.disabled = false;
+          showSpinner(spinnerId, false);
+         return;
+     }
+     if (password.length < 6) {
+         if(errorEl){ errorEl.textContent = 'Password must be at least 6 characters.'; errorEl.classList.remove('hidden'); }
+          if (submitButton) submitButton.disabled = false;
+          showSpinner(spinnerId, false);
+         return;
+     }
+
+     try {
+         const result = await apiRequest('/auth/register', 'POST', { username, password });
+         const successMsg = result.message || 'Registration successful! Please login.';
+         if (messageEl) {
+            messageEl.textContent = successMsg;
+            messageEl.className = 'form-message success';
+            messageEl.classList.remove('hidden');
+         } else {
+             showStatusMessage('globalStatus', successMsg, 'success');
+         }
+         form.reset();
+     } catch (error) {
+         const message = error.data?.message || error.message || 'Registration failed.';
+          if(errorEl){ errorEl.textContent = message; errorEl.classList.remove('hidden'); }
+          else { showStatusMessage('globalStatus', message, 'error'); }
+     } finally {
+         if (submitButton) submitButton.disabled = false;
+         showSpinner(spinnerId, false);
+     }
+}
+
+/**
+ * Handles the logout button click.
+ */
+async function handleLogout() {
+    try {
+        showStatusMessage('globalStatus', 'Logging out...', 'info', 0);
+        await apiRequest('/auth/logout', 'POST');
+        showStatusMessage('globalStatus', 'Logout successful. Redirecting...', 'success', 1500);
+        setTimeout(() => { window.location.href = '/login'; }, 1500);
+    } catch (error) {
+         showStatusMessage('globalStatus', 'Logout failed.', 'error');
+    }
+}
+
+/**
+ * Initializes authentication related event listeners.
+ */
+function initAuthListeners() {
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    if (loginForm) {
+        console.log("Attaching listener to login form");
+        loginForm.addEventListener('submit', handleLogin);
+    }
+    if (registerForm) {
+        console.log("Attaching listener to register form");
+        registerForm.addEventListener('submit', handleRegister);
+    }
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+}
+
+export { initAuthListeners };
+```
+
+### libraryHandlers.js
+
+```js
 // public/js/modules/libraryHandlers.js
 import { apiRequest } from './api.js';
 import { showStatusMessage, showSpinner, openModal, closeModal, setupDeleteConfirmation, formModal } from './ui.js';
@@ -3396,6 +3537,309 @@ export {
 ### listHandlers.js
 
 ```js
+// public/js/modules/listHandlers.js
+import { apiRequest } from './api.js';
+import { showStatusMessage, showSpinner, openModal, closeModal, setupDeleteConfirmation, formModal } from './ui.js';
+// No template needed here as forms are built with strings currently
+
+/**
+ * Handles clicking the "Create New List" button.
+ */
+function handleCreateListClick() {
+    const formHTML = `
+       <button class="modal-close-btn" aria-label="Close">×</button>
+       <h2>Create New List</h2>
+       <form id="listForm" data-mode="create">
+           <div class="form-group"> <label for="listTitle">List Title:</label> <input type="text" id="listTitle" name="title" required> </div>
+           <div class="form-group"> <label for="listDescription">Description (Optional):</label> <textarea id="listDescription" name="description" rows="3"></textarea> </div>
+           <div class="form-group"> <label for="listIsPublic">Visibility:</label> <select id="listIsPublic" name="isPublic"><option value="false">Private</option><option value="true">Public</option></select> </div>
+           <div class="form-group"> <label for="listCoverImageUrl">Cover Image URL (Optional):</label> <input type="url" id="listCoverImageUrl" name="coverImageUrl"> </div>
+           <div class="modal-actions"> <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button> <button type="submit" class="btn btn-primary">Create List</button> <div id="modalSpinner" class="spinner hidden"></div> </div>
+           <p class="modal-error-message hidden"></p>
+       </form>
+    `;
+    openModal(formModal, formHTML, 'modal-list-form');
+}
+
+/**
+ * Handles clicking the "Edit List" button. Fetches list data and shows modal.
+ * @param {Event} event - The click event.
+ */
+async function handleEditListClick(event) {
+    const button = event.target.closest('.edit-list-btn');
+    const listId = button?.dataset.listId;
+    if (!listId) return;
+
+    openModal(formModal, '<div class="spinner"></div> Loading list details...', 'modal-list-form');
+
+     try {
+        const listData = await apiRequest(`/lists/${listId}`);
+        const formHTML = `
+           <button class="modal-close-btn" aria-label="Close">×</button>
+           <h2>Edit List</h2>
+           <form id="listForm" data-mode="edit" data-list-id="${listId}">
+               <div class="form-group"><label for="listTitle">List Title:</label><input type="text" id="listTitle" name="title" required value="${listData.title || ''}"></div>
+               <div class="form-group"><label for="listDescription">Description (Optional):</label><textarea id="listDescription" name="description" rows="3">${listData.description || ''}</textarea></div>
+               <div class="form-group"><label for="listIsPublic">Visibility:</label><select id="listIsPublic" name="isPublic"><option value="false" ${!listData.isPublic ? 'selected' : ''}>Private</option><option value="true" ${listData.isPublic ? 'selected' : ''}>Public</option></select></div>
+               <div class="form-group"><label for="listCoverImageUrl">Cover Image URL (Optional):</label><input type="url" id="listCoverImageUrl" name="coverImageUrl" value="${listData.coverImageUrl || ''}"></div>
+               <div class="modal-actions"><button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button><button type="submit" class="btn btn-primary">Save Changes</button><div id="modalSpinner" class="spinner hidden"></div></div>
+               <p class="modal-error-message hidden"></p>
+           </form>
+        `;
+         const contentArea = formModal.querySelector('#modalContentArea');
+         if(contentArea) contentArea.innerHTML = formHTML;
+         else closeModal(formModal);
+     } catch (error) {
+          const message = error.data?.message || error.message || 'Failed to load list data.';
+           const contentArea = formModal.querySelector('#modalContentArea');
+           if(contentArea) contentArea.innerHTML = `<p class="error-message">${message}</p><button class="modal-close-btn" aria-label="Close">×</button>`;
+           else showStatusMessage('globalStatus', message, 'error');
+     }
+}
+
+/**
+ * Handles submission of the list create/edit form.
+ * @param {Event} event - The form submission event.
+ */
+async function handleListFormSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    if (form.id !== 'listForm') return;
+
+    const mode = form.dataset.mode;
+    const listId = form.dataset.listId;
+    const modalErrorEl = form.querySelector('.modal-error-message');
+    modalErrorEl?.classList.add('hidden');
+    showSpinner('modalSpinner', true);
+
+    const formData = new FormData(form);
+    const payload = Object.fromEntries(formData.entries());
+    payload.isPublic = payload.isPublic === 'true';
+
+    try {
+        let result; let message = '';
+        if (mode === 'create') {
+            result = await apiRequest('/lists', 'POST', payload);
+            message = `List "${result.title}" created!`;
+        } else {
+             if (!listId) throw new Error("Missing list ID for edit.");
+            result = await apiRequest(`/lists/${listId}`, 'PUT', payload);
+            message = `List "${result.title}" updated!`;
+        }
+         showStatusMessage('globalStatus', message, 'success');
+         closeModal(formModal);
+         if (window.location.pathname === '/lists') { // Reload only on overview page
+            setTimeout(() => window.location.reload(), 500);
+         } else if (window.location.pathname.startsWith('/lists/')) { // Or update detail page title?
+             document.querySelector('.list-info h1')?.textContent = result.title;
+             // Update other details if necessary
+         }
+    } catch (error) {
+       const errMsg = error.data?.message || error.message || 'Operation failed.';
+       if (modalErrorEl) { modalErrorEl.textContent = errMsg; modalErrorEl.classList.remove('hidden'); }
+       else { showStatusMessage('globalStatus', errMsg, 'error'); }
+    } finally {
+         showSpinner('modalSpinner', false);
+    }
+}
+
+/**
+ * Handles clicking the "Delete List" button.
+ * @param {Event} event - The click event.
+ */
+function handleDeleteListClick(event) {
+    const button = event.target.closest('.delete-list-btn');
+    const listId = button?.dataset.listId;
+    const listTitle = button?.dataset.listTitle || 'this list';
+    if (!listId) return;
+    setupDeleteConfirmation({ id: listId, type: 'list', title: listTitle });
+}
+
+/**
+ * Handles submission of the "Add Item to List" form.
+ * @param {Event} event - The form submission event.
+ */
+async function handleAddToListFormSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    if (form.id !== 'addToListForm') return;
+
+    const statusEl = form.querySelector('#addItemStatus');
+    statusEl.textContent = 'Adding...';
+    statusEl.className = 'status-message info';
+    statusEl.classList.remove('hidden');
+
+    const formData = new FormData(form);
+    const listId = formData.get('listId');
+    const payload = {
+       libraryItemId: formData.get('libraryItemId'),
+       userComment: formData.get('userComment')
+    };
+
+    if(!payload.libraryItemId) {
+        statusEl.textContent = 'Library Item ID is required.';
+        statusEl.className = 'status-message error';
+        return;
+    }
+
+    try {
+        const result = await apiRequest(`/lists/${listId}/items`, 'POST', payload);
+        statusEl.textContent = `"${result.title}" added to list!`;
+        statusEl.className = 'status-message success';
+         form.reset();
+         setTimeout(() => window.location.reload(), 1500); // Reload detail page
+    } catch (error) {
+        const message = error.data?.message || error.message || 'Failed to add item.';
+        statusEl.textContent = message;
+         statusEl.className = 'status-message error';
+    } finally {
+         setTimeout(() => statusEl.classList.add('hidden'), 5000);
+    }
+}
+
+/**
+ * Handles clicking the "Remove Item from List" button.
+ * @param {Event} event - The click event.
+ */
+function handleRemoveListItemClick(event) {
+     const button = event.target.closest('.remove-list-item-btn');
+     const listItemRow = button?.closest('.list-item-row');
+     const listId = listItemRow?.closest('.list-items-section')?.dataset.listId || document.body.dataset.listId;
+     const listItemId = listItemRow?.dataset.listItemId;
+     const itemTitle = listItemRow?.querySelector('.col-title a')?.textContent || 'this item';
+
+     if (!listId || !listItemId) {
+         console.error("Could not determine listId or listItemId for removal.");
+         showStatusMessage('globalStatus', 'Error: Could not identify item to remove.', 'error');
+         return;
+     }
+     setupDeleteConfirmation({ id: listItemId, type: 'listItem', title: itemTitle, listId: listId });
+}
+
+/**
+ * Shows the edit comment form for a list item.
+ * @param {Event} event - The click event.
+ */
+function handleEditListItemCommentClick(event) {
+   const button = event.target.closest('.edit-list-item-comment-btn');
+   const listItemRow = button?.closest('.list-item-row');
+   const editForm = listItemRow?.querySelector('.edit-comment-form');
+   const commentDisplay = listItemRow?.querySelector('.col-comment');
+   if (!listItemRow || !editForm || !commentDisplay) return;
+
+   // Hide other open forms
+   listItemRow.closest('.list-items-table')?.querySelectorAll('.edit-comment-form:not(.hidden)')
+       .forEach(form => handleCancelEditListItemCommentClick({ target: form.querySelector('.cancel-edit-comment-btn') }));
+
+   commentDisplay.classList.add('hidden');
+   editForm.classList.remove('hidden');
+   button.classList.add('hidden');
+   listItemRow.querySelector('.remove-list-item-btn')?.classList.add('hidden');
+   editForm.querySelector('input[name="userComment"]')?.focus();
+}
+
+/**
+ * Hides the edit comment form for a list item.
+ * @param {Event} event - The click event.
+ */
+function handleCancelEditListItemCommentClick(event) {
+    const button = event.target.closest('.cancel-edit-comment-btn') || event.target.closest('.edit-comment-form');
+    const listItemRow = button?.closest('.list-item-row');
+    const editForm = listItemRow?.querySelector('.edit-comment-form');
+    const commentDisplay = listItemRow?.querySelector('.col-comment');
+    if (!listItemRow || !editForm || !commentDisplay) return;
+
+    editForm.classList.add('hidden');
+    commentDisplay.classList.remove('hidden');
+    listItemRow.querySelector('.edit-list-item-comment-btn')?.classList.remove('hidden');
+    listItemRow.querySelector('.remove-list-item-btn')?.classList.remove('hidden');
+}
+
+/**
+* Handles submission of the edit comment form for a list item.
+* @param {Event} event - The form submission event.
+*/
+async function handleListItemCommentFormSubmit(event) {
+   event.preventDefault();
+   const form = event.target;
+   if (!form.classList.contains('edit-comment-form')) return;
+
+   const listItemRow = form.closest('.list-item-row');
+   const listId = listItemRow?.closest('.list-items-section')?.dataset.listId || document.body.dataset.listId;
+   const listItemId = listItemRow?.dataset.listItemId;
+   const commentInput = form.querySelector('input[name="userComment"]');
+   const commentDisplay = listItemRow?.querySelector('.col-comment');
+   const originalComment = commentDisplay?.textContent; // Preserve original in case of error
+
+   if (!listId || !listItemId || !commentInput || !commentDisplay) return;
+
+   const payload = { userComment: commentInput.value };
+   commentDisplay.textContent = 'Saving...';
+   commentDisplay.classList.remove('hidden');
+   form.classList.add('hidden');
+
+   try {
+       const result = await apiRequest(`/lists/${listId}/items/${listItemId}`, 'PUT', payload);
+       commentDisplay.textContent = result.userComment || '---';
+       handleCancelEditListItemCommentClick({ target: form });
+    } catch (error) {
+        const message = error.data?.message || error.message || 'Failed to save comment.';
+        console.error("Comment save error:", message);
+        commentDisplay.textContent = originalComment; // Revert on error
+        alert(`Error: ${message}`);
+        handleCancelEditListItemCommentClick({ target: form });
+    }
+}
+
+/**
+ * Initializes event listeners for list overview and detail pages.
+ */
+function initListInteractions() {
+    const createListBtn = document.getElementById('createListBtn'); // Overview page
+    const listsContainer = document.querySelector('.lists-container'); // Overview page
+    const listDetailContainer = document.querySelector('.list-detail-page'); // Detail page
+
+    // Overview Page
+    if (createListBtn) {
+        createListBtn.addEventListener('click', handleCreateListClick);
+    }
+    if (listsContainer) {
+        listsContainer.addEventListener('click', (event) => {
+             if (event.target.closest('.edit-list-btn')) handleEditListClick(event);
+             else if (event.target.closest('.delete-list-btn')) handleDeleteListClick(event);
+        });
+    }
+
+    // Detail Page
+    if (listDetailContainer) {
+        // Set listId on body/section for context if needed by handlers
+        const pathParts = window.location.pathname.split('/').filter(p => p);
+        if (pathParts[0] === 'lists' && pathParts[1]) {
+            document.body.dataset.listId = pathParts[1];
+            listDetailContainer.querySelector('.list-items-section')?.setAttribute('data-list-id', pathParts[1]);
+        }
+
+        listDetailContainer.addEventListener('submit', (event) => {
+            if (event.target.id === 'addToListForm') handleAddToListFormSubmit(event);
+            else if (event.target.classList.contains('edit-comment-form')) handleListItemCommentFormSubmit(event);
+        });
+
+        listDetailContainer.addEventListener('click', (event) => {
+            if (event.target.closest('.edit-list-btn')) handleEditListClick(event);
+            else if (event.target.closest('.delete-list-btn')) handleDeleteListClick(event);
+            else if (event.target.closest('.remove-list-item-btn')) handleRemoveListItemClick(event);
+            else if (event.target.closest('.edit-list-item-comment-btn')) handleEditListItemCommentClick(event);
+            else if (event.target.closest('.cancel-edit-comment-btn')) handleCancelEditListItemCommentClick(event);
+        });
+    }
+}
+
+export { initListInteractions };
+```
+
+### profileHandlers.js
+
+```js
 // public/js/modules/profileHandlers.js
 import { apiRequest } from './api.js';
 import { showStatusMessage } from './ui.js';
@@ -3434,12 +3878,6 @@ function initProfileInteractions() {
 }
 
 export { initProfileInteractions };
-```
-
-### porfileHandlers.js
-
-```js
-
 ```
 
 ### swiperSetup.js
@@ -3811,49 +4249,90 @@ router.use(checkAuthStatus);
 // Helper to build API URL
 const getApiUrl = (req) => `${req.protocol}://${req.get('host')}/api`;
 
+// --- TMDB Setup ---
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+
+// Helper to safely extract year
+const getYear = (dateString) => {
+    if (!dateString) return null;
+    try {
+        return new Date(dateString).getFullYear();
+    } catch (e) {
+        const yearMatch = dateString.match(/\d{4}/); // Try matching YYYY
+        return yearMatch ? parseInt(yearMatch[0], 10) : null;
+    }
+};
+
+// Helper function to map TMDB movie data to our card structure
+const mapTmdbToCardData = (item) => ({
+    mediaId: item.id.toString(),
+    mediaType: 'movie', // Explicitly set type
+    title: item.title,
+    imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : '/images/placeholder.png', // Card image size
+    releaseYear: getYear(item.release_date),
+    // Add other fields if needed by the card partial in the future
+});
+
 // --- Public Routes ---
 
-// Homepage (Refactored)
+// Homepage (Refactored with TMDB Trending)
 router.get('/', async (req, res, next) => {
-    try {
-        let watchlistItems = [];
-        if (res.locals.user) {
+    let watchlistItems = [];
+    let trendingMovies = [];
+    let homeError = null; // Initialize error message
+
+    // 1. Fetch User's Watchlist (Planned Items) if logged in
+    if (res.locals.user) {
+        try {
             const apiUrl = getApiUrl(req);
-            // Fetch items with status 'planned' for the watchlist
             const response = await axios.get(`${apiUrl}/library?userStatus=planned`, {
                 headers: { Cookie: req.headers.cookie } // Forward cookie for auth
             });
             watchlistItems = response.data;
+        } catch (error) {
+            console.error("Homepage Watchlist Fetch Error:", error.response?.data || error.message);
+            homeError = "Could not load your watchlist."; // Set error message but continue
         }
-        // Placeholder data for Hottest/Recommendations
-        const placeholderItems = Array(5).fill({
-             title: "Placeholder",
-             imageUrl: "/images/placeholder.png",
-             mediaType: "movie",
-             mediaId: "0",
-             releaseYear: new Date().getFullYear()
-        });
+    }
 
+    // 2. Fetch Trending Movies from TMDB
+    if (TMDB_API_KEY) {
+        try {
+            const trendingUrl = `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&language=en-US`;
+            const trendingResponse = await axios.get(trendingUrl);
+            // Take top 10-12 trending movies and map them
+            trendingMovies = trendingResponse.data.results.slice(0, 12).map(mapTmdbToCardData);
+        } catch (error) {
+            console.error("Homepage TMDB Trending Fetch Error:", error.response?.data || error.message);
+            // Set error message if trending fetch fails, but keep placeholders if watchlist also failed
+            homeError = homeError ? `${homeError} Also failed to load trending movies.` : "Could not load trending movies.";
+            // Fallback to empty array if fetch fails
+            trendingMovies = [];
+        }
+    } else {
+        console.warn("TMDB_API_KEY missing. Cannot fetch trending movies for homepage.");
+        homeError = homeError ? `${homeError} Also missing TMDB API Key for trending.` : "Trending movies unavailable (missing API key).";
+        trendingMovies = []; // Use empty array if key is missing
+    }
+
+    // 3. Render the page
+    try {
         res.render('home', {
             pageTitle: 'Home',
-            hottest: placeholderItems, // Placeholder
+            // Use trending movies for both sections if available, otherwise empty array
+            hottest: trendingMovies.length > 0 ? trendingMovies : [],
             watchlist: watchlistItems, // User's actual watchlist ('planned' status)
-            recommendations: placeholderItems, // Placeholder
+            recommendations: trendingMovies.length > 0 ? trendingMovies : [],
+            homeError: homeError, // Pass any accumulated errors
             // user is already in res.locals
         });
-    } catch (error) {
-        console.error("Homepage Error:", error.response?.data || error.message);
-        // Don't fail the whole page if watchlist fetch fails, show empty
-         res.render('home', {
-            pageTitle: 'Home',
-            hottest: Array(5).fill({ title: "Placeholder", imageUrl: "/images/placeholder.png", mediaType: "movie", mediaId: "0", releaseYear: new Date().getFullYear()}),
-            watchlist: [], // Empty watchlist on error
-            recommendations: Array(5).fill({ title: "Placeholder", imageUrl: "/images/placeholder.png", mediaType: "movie", mediaId: "0", releaseYear: new Date().getFullYear()}),
-            homeError: "Could not load your watchlist."
-        });
-        // Or pass to generic error handler: next(error);
+    } catch (renderError) {
+         console.error("Homepage Render Error:", renderError);
+         next(renderError); // Pass rendering errors to the main error handler
     }
 });
+
 
 // About Page (Simple, unchanged)
 router.get('/about', (req, res) => {
@@ -3874,7 +4353,7 @@ router.get('/login', (req, res) => {
 
 // --- Protected Routes ---
 
-// Media Detail Page (New)
+// Media Detail Page (New) - Keep as is
 router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) => {
     const { mediaType, mediaId } = req.params;
     const userId = res.locals.user.id;
@@ -3955,7 +4434,7 @@ router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) =>
     }
 });
 
-// Search Results Page (New)
+// Search Results Page (New) - Keep as is
 router.get('/search', requireLogin, async (req, res, next) => {
     const query = req.query.q || '';
     const apiUrl = getApiUrl(req);
@@ -3988,7 +4467,9 @@ router.get('/search', requireLogin, async (req, res, next) => {
         // Organize results by type
         const categorizedResults = {};
         searchResultsArray.forEach(result => {
-            categorizedResults[result.type] = result.data;
+            // Map 'video game' results to 'video_game' key if template expects that
+            const key = result.type === 'video game' ? 'video_game' : result.type;
+            categorizedResults[key] = result.data;
         });
 
         res.render('searchResults', {
@@ -4004,11 +4485,11 @@ router.get('/search', requireLogin, async (req, res, next) => {
     }
 });
 
-// User Profile Page (New - Basic Implementation)
+
+// User Profile Page (New - Basic Implementation) - Keep as is
 router.get('/profile', requireLogin, async (req, res, next) => { // Route for logged-in user's own profile
      await renderProfilePage(req, res, next, res.locals.user.id); // Call helper with logged-in user's ID
 });
-
 router.get('/profile/:username', requireLogin, async (req, res, next) => {
     try {
         // Find user ID by username (case-insensitive)
@@ -4021,8 +4502,7 @@ router.get('/profile/:username', requireLogin, async (req, res, next) => {
         next(error);
     }
 });
-
-// Helper function to render profile page (to avoid code duplication)
+// Helper function to render profile page (to avoid code duplication) - Keep as is
 async function renderProfilePage(req, res, next, profileUserId) {
      const loggedInUserId = res.locals.user.id;
      const isOwnProfile = profileUserId === loggedInUserId;
@@ -4077,8 +4557,7 @@ async function renderProfilePage(req, res, next, profileUserId) {
      }
 }
 
-
-// User Lists Overview Page (New)
+// User Lists Overview Page (New) - Keep as is
 router.get('/lists', requireLogin, async (req, res, next) => {
     const userId = req.locals.user.id;
     const apiUrl = getApiUrl(req);
@@ -4104,7 +4583,7 @@ router.get('/lists', requireLogin, async (req, res, next) => {
     }
 });
 
-// List Detail Page (New)
+// List Detail Page (New) - Keep as is
 router.get('/lists/:listId', requireLogin, async (req, res, next) => {
     const listId = req.params.listId;
     const userId = res.locals.user.id;
@@ -4145,14 +4624,16 @@ router.get('/lists/:listId', requireLogin, async (req, res, next) => {
 });
 
 
-// --- Route for Client-Side Handlebars Partials ---
+// --- Route for Client-Side Handlebars Partials --- - Keep as is
 // Keep this, but update allowed partials
 const ALLOWED_PARTIALS = new Set([
     'mediaCard', // Keep
     'itemFormModal', // Keep for add/edit actions
-    'mediaDetailUserInteraction', // New partial for interaction controls on detail page?
+    'userInteractionControls', // Updated name
     'listSummaryRow', // New
     'listItemRow', // New
+    'loginForm', // For potential future use?
+    'registerForm', // For potential future use?
     // Add others as needed
 ]);
 const partialsDir = path.join(__dirname, '../views/partials');
@@ -4161,6 +4642,7 @@ router.get('/templates/:templateName', requireLogin, async (req, res) => {
     const templateName = req.params.templateName;
 
     if (!ALLOWED_PARTIALS.has(templateName)) {
+        console.warn(`Template request blocked: ${templateName}`); // Log blocked attempts
         return res.status(404).send('Template not found or not allowed.');
     }
     const filePath = path.join(partialsDir, `${templateName}.hbs`);
