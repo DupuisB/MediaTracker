@@ -140,6 +140,35 @@
     display: inline-block;
 }
 
+.detail-trailer-section {
+    /* Optional: Add specific padding/margin if needed */
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+.detail-trailer-section h3 {
+    margin-top: 0;
+    margin-bottom: var(--space-md);
+}
+
+/* Responsive Video Container */
+.video-responsive {
+    overflow: hidden;
+    padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+    position: relative;
+    height: 0;
+    border-radius: var(--border-radius-sm); /* Optional: round corners */
+}
+
+.video-responsive iframe {
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    border: none; /* Override default iframe border */
+}
+
+
 /* Cast Section */
 .detail-cast-section { padding: var(--space-lg); margin-bottom: var(--space-xl); }
 .detail-cast-section h3 { margin-top: 0; margin-bottom: var(--space-md); }

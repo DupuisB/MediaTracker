@@ -4,7 +4,7 @@ const path = require('path');
 const util = require('util'); // Import the util module
 
 // Define the path to the database file
-const dbPath = path.resolve(__dirname, 'watchlist_v2.db'); // New DB file name
+const dbPath = path.resolve(__dirname, 'watchlist_v2.db'); // Existing DB file name
 
 // Create or open the database
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -13,7 +13,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
         process.exit(1); // Exit if DB can't be opened
     } else {
         console.log('Connected to the SQLite database (v2).');
-        initializeDatabaseV2(); // Call the updated init function
+        initializeDatabaseV2(); // Call the initialization function
     }
 });
 
@@ -24,7 +24,7 @@ db.runAsync = function(sql, params = []) {
     return new Promise((resolve, reject) => {
         this.run(sql, params, function(err) {
             if (err) {
-                console.error('DB Run Error:', err.message, 'SQL:', sql);
+                console.error('DB Run Error:', err.message, 'SQL:', sql.substring(0, 100) + (sql.length > 100 ? '...' : '')); // Log SQL snippet
                 // Handle specific errors like UNIQUE constraint
                 if (err.message.includes('UNIQUE constraint failed')) {
                     return reject(new Error('UNIQUE constraint failed. Item might already exist.'));
@@ -41,28 +41,27 @@ db.runAsync = function(sql, params = []) {
 }.bind(db);
 
 
-// Function to initialize the NEW database schema
+// Function to initialize the database schema IF TABLES DO NOT EXIST
 function initializeDatabaseV2() {
     db.serialize(() => {
         try {
-            console.log("Initializing Database Schema V2...");
+            console.log("Checking/Initializing Database Schema V2...");
 
-            // 1. Users Table (Remains the same)
+            // 1. Users Table (Uses IF NOT EXISTS - Safe)
             db.run(`
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
                     passwordHash TEXT NOT NULL,
                     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    -- Profile fields (can be expanded later)
                     profileImageUrl TEXT,
                     profilePrivacy TEXT DEFAULT 'private' CHECK(profilePrivacy IN ('public', 'private'))
                 )
             `);
             console.log('- Users table checked/created.');
 
-            // 2. Library Items Table (Updated based on UserMediaInteraction)
-            db.run(`DROP TABLE IF EXISTS library_items;`); // Drop old table for clean setup
+            // 2. Library Items Table (Uses IF NOT EXISTS - Safe)
+            // --- REMOVED: db.run(`DROP TABLE IF EXISTS library_items;`); ---
             db.run(`
                 CREATE TABLE IF NOT EXISTS library_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,15 +69,14 @@ function initializeDatabaseV2() {
                     mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
                     mediaId TEXT NOT NULL, -- ID from external API
 
-                    -- Core details
+                    -- Core details stored at time of adding
                     title TEXT NOT NULL,
                     imageUrl TEXT,
                     releaseYear INTEGER,
 
                     -- User-specific interaction data
                     userStatus TEXT NOT NULL DEFAULT 'planned' CHECK(userStatus IN ('planned', 'watching', 'completed', 'paused', 'dropped')),
-                    -- MODIFIED: Changed to REAL and updated CHECK constraint range 0-20
-                    userRating REAL CHECK(userRating IS NULL OR (userRating >= 0 AND userRating <= 20)),
+                    userRating REAL CHECK(userRating IS NULL OR (userRating >= 0 AND userRating <= 20)), -- Use REAL for decimals 0-20
                     userNotes TEXT,
                     isFavorite BOOLEAN DEFAULT 0,
 
@@ -93,13 +91,12 @@ function initializeDatabaseV2() {
             `);
             console.log('- Library Items table checked/created.');
 
-            // Index for faster library lookups
+            // Index for faster library lookups (Uses IF NOT EXISTS - Safe)
             db.run(`CREATE INDEX IF NOT EXISTS idx_library_user_status ON library_items (userId, userStatus);`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_library_user_favorite ON library_items (userId, isFavorite);`);
-            console.log('- Library Items indexes created.');
+            console.log('- Library Items indexes checked/created.');
 
-
-            // 3. User Lists Table
+            // 3. User Lists Table (Uses IF NOT EXISTS - Safe)
             db.run(`
                 CREATE TABLE IF NOT EXISTS user_lists (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,31 +111,28 @@ function initializeDatabaseV2() {
                     FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
                 )
             `);
-            console.log('- User Lists table created.');
+            console.log('- User Lists table checked/created.');
 
-            // 4. User List Items Table
+            // 4. User List Items Table (Uses IF NOT EXISTS - Safe)
             db.run(`
                 CREATE TABLE IF NOT EXISTS user_list_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     listId INTEGER NOT NULL,
-                    libraryItemId INTEGER NOT NULL, -- Link to the entry in the user's library
-                    userComment TEXT, -- Comment specific to this item *in this list*
-                    -- progressStatus TEXT, -- Removed, progress tracked on library_item
-                    -- userRatingInList INTEGER, -- Removed, rating tracked on library_item
+                    libraryItemId INTEGER NOT NULL,
+                    userComment TEXT,
                     dateAdded DATETIME DEFAULT CURRENT_TIMESTAMP,
 
                     FOREIGN KEY (listId) REFERENCES user_lists (id) ON DELETE CASCADE,
                     FOREIGN KEY (libraryItemId) REFERENCES library_items (id) ON DELETE CASCADE,
-                    UNIQUE(listId, libraryItemId) -- Prevent adding same library item multiple times to the same list
+                    UNIQUE(listId, libraryItemId)
                 )
             `);
-            console.log('- User List Items table created.');
-
+            console.log('- User List Items table checked/created.');
 
             // --- Triggers for updatedAt ---
-            // Drop old trigger if exists
+            // Drop old triggers first (needed if definition changes) then create.
+            // This pattern is generally safe as it doesn't affect table data.
             db.run(`DROP TRIGGER IF EXISTS update_library_item_timestamp;`);
-            // Library Items Trigger
             db.run(`
                 CREATE TRIGGER update_library_item_timestamp
                 AFTER UPDATE ON library_items
@@ -147,7 +141,7 @@ function initializeDatabaseV2() {
                     UPDATE library_items SET updatedAt = CURRENT_TIMESTAMP WHERE id = OLD.id;
                 END;
             `);
-             // User Lists Trigger
+
              db.run(`DROP TRIGGER IF EXISTS update_user_list_timestamp;`);
              db.run(`
                 CREATE TRIGGER update_user_list_timestamp
@@ -169,4 +163,4 @@ function initializeDatabaseV2() {
 }
 
 // Export the db object with the added Async methods
-module.exports = db; // dbUtils is no longer needed as promises are added directly
+module.exports = db;
