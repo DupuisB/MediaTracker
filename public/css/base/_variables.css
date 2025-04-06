@@ -48,10 +48,6 @@
     --color-status-paused: #ecc94b;    /* Yellow */
     --color-status-dropped: #a0aec0;   /* Grey */
 
-    /* Star Rating */
-    --color-star-filled: #f5a623; /* Gold */
-    --color-star-empty: #d1d5db; /* Light Grey */
-
     /* --- Fonts --- */
     --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     --font-family-heading: var(--font-family-base); /* Same as base for simplicity */

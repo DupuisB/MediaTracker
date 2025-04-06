@@ -9,7 +9,7 @@
     </div>
     <div class="col-status">
          <span class="tag tag-status-{{classify item.userStatus}}">{{capitalize item.userStatus}}</span>
-         {{#if item.userRating}}({{item.userRating}}/10){{/if}}
+         {{#if item.userRating}}({{item.userRating}}/20){{/if}}
     </div>
     <div class="col-comment">{{defaultIfEmpty item.userComment "---"}}</div>
     <div class="col-added">{{formatDate item.dateAdded}}</div>

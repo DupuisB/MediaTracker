@@ -68,29 +68,30 @@ function initializeDatabaseV2() {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     userId INTEGER NOT NULL,
                     mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
-                    mediaId TEXT NOT NULL, -- ID from external API (TMDB, Google Books, IGDB)
+                    mediaId TEXT NOT NULL, -- ID from external API
 
-                    -- Core details stored at time of adding (can be updated if needed)
+                    -- Core details
                     title TEXT NOT NULL,
                     imageUrl TEXT,
-                    releaseYear INTEGER, -- Store just the year for consistency
+                    releaseYear INTEGER,
 
                     -- User-specific interaction data
-                    userStatus TEXT NOT NULL DEFAULT 'planned' CHECK(userStatus IN ('planned', 'watching', 'completed', 'paused', 'dropped')), -- Changed statuses
-                    userRating INTEGER CHECK(userRating IS NULL OR (userRating >= 1 AND userRating <= 10)), -- Changed rating scale (e.g., 1-10 stars)
-                    userNotes TEXT, -- Renamed from userDescription
-                    isFavorite BOOLEAN DEFAULT 0, -- Favorite flag
+                    userStatus TEXT NOT NULL DEFAULT 'planned' CHECK(userStatus IN ('planned', 'watching', 'completed', 'paused', 'dropped')),
+                    -- MODIFIED: Changed to REAL and updated CHECK constraint range 0-20
+                    userRating REAL CHECK(userRating IS NULL OR (userRating >= 0 AND userRating <= 20)),
+                    userNotes TEXT,
+                    isFavorite BOOLEAN DEFAULT 0,
 
                     -- Timestamps
                     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    completedAt DATETIME, -- Timestamp when marked as completed
+                    completedAt DATETIME,
 
                     FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
-                    UNIQUE(userId, mediaType, mediaId) -- Prevent adding the same item multiple times per user
+                    UNIQUE(userId, mediaType, mediaId)
                 )
             `);
-            console.log('- Library Items table created.');
+            console.log('- Library Items table checked/created.');
 
             // Index for faster library lookups
             db.run(`CREATE INDEX IF NOT EXISTS idx_library_user_status ON library_items (userId, userStatus);`);

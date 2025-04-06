@@ -134,19 +134,11 @@
 .meta-value {
     color: var(--color-text-light);
 }
-.rating-display .star {
-     font-size: 1.1em;
-     color: var(--color-star-empty);
-}
-.rating-display .star.filled {
-    color: var(--color-star-filled);
-}
 .external-links a {
     margin-right: var(--space-md);
     font-weight: var(--font-weight-medium);
     display: inline-block;
 }
-
 
 /* Cast Section */
 .detail-cast-section { padding: var(--space-lg); margin-bottom: var(--space-xl); }

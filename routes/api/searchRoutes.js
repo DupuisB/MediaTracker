@@ -42,7 +42,6 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ message: 'Invalid or missing media type parameter.' });
     }
 
-    console.log(`API Search: Type=${mediaType}, Query="${query}"`);
     const encodedQuery = encodeURIComponent(query.trim());
     let results = [];
 

@@ -8,7 +8,6 @@ import { showStatusMessage, showSpinner } from './ui.js';
  */
 async function handleLogin(event) {
     event.preventDefault();
-    console.log("handleLogin executed");
     const form = event.target;
     const username = form.username.value.trim();
     const password = form.password.value.trim();

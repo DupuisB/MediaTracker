@@ -5,6 +5,7 @@ import { initSwipers } from './modules/swiperSetup.js';
 import { initMediaDetailInteraction, handleLibraryItemFormSubmit } from './modules/libraryHandlers.js';
 import { initListInteractions, handleListFormSubmit } from './modules/listHandlers.js';
 import { initProfileInteractions } from './modules/profileHandlers.js';
+import { initHomepageTabs } from './modules/homepageHandlers.js';
 import { closeModal, deleteConfirmModal, formModal, handleDeleteConfirm } from './modules/ui.js';
 
 (function () {
@@ -63,57 +64,27 @@ import { closeModal, deleteConfirmModal, formModal, handleDeleteConfirm } from '
 
         // Homepage specific listeners
         if (path === '/') {
-            document.querySelector('.horizontal-nav')?.addEventListener('click', (event) => {
-                if (event.target.matches('.nav-item')) {
-                    const filter = event.target.dataset.filter;
-                    console.log("Homepage Filter selected:", filter); // TODO: Implement filtering
-                    document.querySelectorAll('.horizontal-nav .nav-item').forEach(el => el.classList.remove('active'));
-                    event.target.classList.add('active');
-                }
-            });
+            initHomepageTabs();
+            initSwipers();
+        } else if (path.startsWith('/profile') || path.startsWith('/media/')) {
+            initSwipers();
         }
 
         // Login/Register Page (Handled by initAuthListeners)
         // Search Results Page
+        if (path.startsWith('/media/') && pathParts.length === 3) { initMediaDetailInteraction(); }
+        if (path.startsWith('/profile')) { initProfileInteractions(); }
+        if (path === '/lists') { initListInteractions(); }
+        if (path.startsWith('/lists/') && pathParts.length === 2) { initListInteractions(); }
+        // Keep search results nav handler or integrate into a search specific module
         if (path === '/search') {
             const searchNav = document.querySelector('.search-nav');
-            searchNav?.addEventListener('click', (event) => { // Directly add filter logic here or import if complex
-                 const target = event.target;
-                 if (!target.matches('.search-nav .nav-item')) return;
-                 const filter = target.dataset.filter;
-                 const resultsArea = document.getElementById('search-results-area');
-                 if (!resultsArea) return;
-                 target.closest('.search-nav').querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
-                 target.classList.add('active');
-                 resultsArea.querySelectorAll('.results-category').forEach(section => {
-                     section.style.display = (filter === 'all' || section.dataset.category === filter) ? '' : 'none';
-                 });
-            });
-            // Apply 'All' filter on load
+            searchNav?.addEventListener('click', handleSearchNavFilter);
+            // Apply 'All' filter on load if needed
             const allButton = searchNav?.querySelector('.nav-item[data-filter="all"]');
             if (allButton && allButton.classList.contains('active')) {
-                 handleSearchNavFilter({ target: allButton }); // Apply 'All' filter on load
+                handleSearchNavFilter({ target: allButton });
             }
-        }
-
-        // Media Detail Page
-        if (path.startsWith('/media/') && pathParts.length === 3) {
-            initMediaDetailInteraction();
-        }
-
-         // Profile Page
-         if (path.startsWith('/profile')) {
-            initProfileInteractions();
-        }
-
-        // Lists Overview Page
-        if (path === '/lists') {
-            initListInteractions();
-        }
-
-        // List Detail Page
-        if (path.startsWith('/lists/') && pathParts.length === 2) {
-            initListInteractions();
         }
     }
 

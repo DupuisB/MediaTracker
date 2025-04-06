@@ -44,57 +44,59 @@ const mapTmdbToCardData = (item) => ({
 // Homepage (Refactored with TMDB Trending)
 router.get('/', async (req, res, next) => {
     let watchlistItems = [];
-    let trendingMovies = [];
-    let homeError = null; // Initialize error message
+    let initialHottest = []; // For the default tab (Movies)
+    let initialRecommendations = []; // For the default tab (Movies)
+    let homeError = null;
+    const defaultTabType = 'movie'; // Set default tab
 
     // 1. Fetch User's Watchlist (Planned Items) if logged in
     if (res.locals.user) {
         try {
             const apiUrl = getApiUrl(req);
-            const response = await axios.get(`${apiUrl}/library?userStatus=planned`, {
-                headers: { Cookie: req.headers.cookie } // Forward cookie for auth
+            // Fetch planned items, sorted by update time, limited
+            const response = await axios.get(`${apiUrl}/library?userStatus=planned&sortBy=updatedAt&limit=12`, {
+                headers: { Cookie: req.headers.cookie }
             });
             watchlistItems = response.data;
         } catch (error) {
             console.error("Homepage Watchlist Fetch Error:", error.response?.data || error.message);
-            homeError = "Could not load your watchlist."; // Set error message but continue
+            homeError = "Could not load your watchlist.";
         }
     }
 
-    // 2. Fetch Trending Movies from TMDB
-    if (TMDB_API_KEY) {
-        try {
-            const trendingUrl = `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&language=en-US`;
-            const trendingResponse = await axios.get(trendingUrl);
-            // Take top 10-12 trending movies and map them
-            trendingMovies = trendingResponse.data.results.slice(0, 12).map(mapTmdbToCardData);
-        } catch (error) {
-            console.error("Homepage TMDB Trending Fetch Error:", error.response?.data || error.message);
-            // Set error message if trending fetch fails, but keep placeholders if watchlist also failed
-            homeError = homeError ? `${homeError} Also failed to load trending movies.` : "Could not load trending movies.";
-            // Fallback to empty array if fetch fails
-            trendingMovies = [];
-        }
-    } else {
-        console.warn("TMDB_API_KEY missing. Cannot fetch trending movies for homepage.");
-        homeError = homeError ? `${homeError} Also missing TMDB API Key for trending.` : "Trending movies unavailable (missing API key).";
-        trendingMovies = []; // Use empty array if key is missing
+    // 2. Fetch Initial Tab Data (Movies - Popular) from our new API endpoint
+    try {
+        const apiUrl = getApiUrl(req);
+        const response = await axios.get(`${apiUrl}/homepage-data?type=${defaultTabType}`, {
+             headers: { Cookie: req.headers.cookie } // May not be needed if endpoint is public
+        });
+        initialHottest = response.data.hottest || [];
+        initialRecommendations = response.data.recommendations || [];
+    } catch (error) {
+        console.error(`Homepage Initial Tab (${defaultTabType}) Fetch Error:`, error.response?.data || error.message);
+        const errorMsg = `Could not load initial ${defaultTabType} data.`;
+        homeError = homeError ? `${homeError} ${errorMsg}` : errorMsg;
+        // Keep empty arrays on error
+        initialHottest = [];
+        initialRecommendations = [];
     }
+
 
     // 3. Render the page
     try {
         res.render('home', {
             pageTitle: 'Home',
-            // Use trending movies for both sections if available, otherwise empty array
-            hottest: trendingMovies.length > 0 ? trendingMovies : [],
+            // Pass only the initially loaded data
+            initialTab: defaultTabType, // Inform template which tab is active
+            hottest: initialHottest,
+            recommendations: initialRecommendations,
             watchlist: watchlistItems, // User's actual watchlist ('planned' status)
-            recommendations: trendingMovies.length > 0 ? trendingMovies : [],
             homeError: homeError, // Pass any accumulated errors
             // user is already in res.locals
         });
     } catch (renderError) {
          console.error("Homepage Render Error:", renderError);
-         next(renderError); // Pass rendering errors to the main error handler
+         next(renderError);
     }
 });
 
@@ -267,59 +269,65 @@ router.get('/profile/:username', requireLogin, async (req, res, next) => {
         next(error);
     }
 });
-// Helper function to render profile page (to avoid code duplication) - Keep as is
+
 async function renderProfilePage(req, res, next, profileUserId) {
-     const loggedInUserId = res.locals.user.id;
-     const isOwnProfile = profileUserId === loggedInUserId;
-     const apiUrl = getApiUrl(req);
+    const loggedInUserId = res.locals.user.id;
+    const isOwnProfile = profileUserId === loggedInUserId;
+    const apiUrl = getApiUrl(req);
+    const itemsPerList = 12; // How many items to show per default list
 
-     try {
-        // Fetch profile data (basic info + stats)
-        const profileResponse = await axios.get(`${apiUrl}/profile/${profileUserId}`, {
-            headers: { Cookie: req.headers.cookie } // Auth needed
-        });
-        const profileData = profileResponse.data;
+    try {
+       // Fetch profile data (basic info + stats) - KEEP AS IS
+       const profileResponse = await axios.get(`${apiUrl}/profile/${profileUserId}`, {
+           headers: { Cookie: req.headers.cookie } // Auth needed
+       });
+       const profileData = profileResponse.data;
 
-        // Fetch 'Last Seen' (e.g., recently completed items) - Limit to 5-10
-        const lastSeenResponse = await axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=completed&sortBy=completedAt&limit=10`, { // Assuming API supports userId and sorting/limit
-            headers: { Cookie: req.headers.cookie }
-        });
-        const lastSeenItems = lastSeenResponse.data;
+       // --- NEW: Fetch Default Library Lists ---
+       const listFetchPromises = [
+           // Recently Completed (status=completed, sort=completedAt desc)
+           axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=completed&sortBy=completedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Completed):", e.message); return []; }),
+           // Watchlist (status=planned, sort=updatedAt desc)
+           axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=planned&sortBy=updatedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Planned):", e.message); return []; }),
+           // Currently Engaging (status=watching, sort=updatedAt desc)
+           axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=watching&sortBy=updatedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Watching):", e.message); return []; })
+       ];
 
-         // Fetch 'Favorites' - Limit to 5-10
-        const favoritesResponse = await axios.get(`${apiUrl}/library?userId=${profileUserId}&isFavorite=true&limit=10`, { // Assuming API supports userId and filtering
-            headers: { Cookie: req.headers.cookie }
-        });
-        const favoriteItems = favoritesResponse.data;
-
-         // Fetch 'Public Lists' - Limit to 5-10
-         // Only fetch if profile is public OR it's the user's own profile
-         let publicLists = [];
-         if (profileData.profilePrivacy === 'public' || isOwnProfile) {
-             const listsResponse = await axios.get(`${apiUrl}/lists?userId=${profileUserId}&publicOnly=${profileData.profilePrivacy !== 'public' && !isOwnProfile ? 'true' : 'false'}&limit=10`, { // API needs to support filtering
-                 headers: { Cookie: req.headers.cookie }
-             });
-             publicLists = listsResponse.data; // Assuming API returns list summaries
-         }
+       const [recentlyCompletedItems, plannedItems, watchingItems] = await Promise.all(listFetchPromises);
+       // --- End NEW ---
 
 
-        res.render('userProfile', {
-            pageTitle: `${profileData.username}'s Profile`,
-            profile: profileData,
-            isOwnProfile: isOwnProfile,
-            lastSeen: lastSeenItems,
-            favorites: favoriteItems,
-            publicLists: publicLists,
-             // user (logged in user) is already in res.locals
-        });
-
-     } catch(error) {
-        console.error(`Error rendering profile page for user ${profileUserId}:`, error.response?.data || error.message);
-        if (error.response?.status === 404) {
-            return res.status(404).render('error', { pageTitle: 'Not Found', errorCode: 404, errorMessage: 'User profile data not found.' });
+        // Fetch 'Public Lists' - KEEP AS IS
+        let publicLists = [];
+        if (profileData.profilePrivacy === 'public' || isOwnProfile) {
+            const listsResponse = await axios.get(`${apiUrl}/lists?userId=${profileUserId}&publicOnly=${profileData.profilePrivacy !== 'public' && !isOwnProfile ? 'true' : 'false'}&limit=10`, { // API needs to support filtering
+                headers: { Cookie: req.headers.cookie }
+            });
+            publicLists = listsResponse.data; // Assuming API returns list summaries
         }
-        next(error);
-     }
+
+
+       res.render('userProfile', {
+           pageTitle: `${profileData.username}'s Profile`,
+           profile: profileData,
+           isOwnProfile: isOwnProfile,
+           // --- Pass NEW lists to the template ---
+           recentlyCompletedItems: recentlyCompletedItems,
+           plannedItems: plannedItems,
+           watchingItems: watchingItems,
+           // --- Keep publicLists ---
+           publicLists: publicLists,
+            // user (logged in user) is already in res.locals
+       });
+
+    } catch(error) {
+       console.error(`Error rendering profile page for user ${profileUserId}:`, error.response?.data || error.message);
+       if (error.response?.status === 404) { // Handle profile data 404 specifically
+           return res.status(404).render('error', { pageTitle: 'Not Found', errorCode: 404, errorMessage: 'User profile data not found.' });
+       }
+       // Don't pass generic 404/403 from list fetches here, handle above with default empty arrays
+       next(error);
+    }
 }
 
 // User Lists Overview Page (New) - Keep as is

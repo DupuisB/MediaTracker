@@ -13,16 +13,18 @@ const VALID_MEDIA_TYPES = ['movie', 'series', 'book', 'video game'];
 const VALID_STATUSES = ['planned', 'watching', 'completed', 'paused', 'dropped'];
 const COMPLETED_STATUS = 'completed'; // Single status for completion
 
-// Helper function to validate and parse rating (1-10 scale)
+// Helper function to validate and parse rating (MODIFIED for 0-20 REAL)
 function parseAndValidateRating(ratingInput) {
     if (ratingInput === undefined || ratingInput === null || ratingInput === '') {
-        return null; // Allow clearing rating
+        return null;
     }
-    const rating = parseInt(ratingInput, 10);
-    if (isNaN(rating) || rating < 1 || rating > 10) {
-        throw new Error('Invalid userRating. Must be an integer between 1 and 10, or null/empty.');
+    // Use parseFloat for decimals
+    const rating = parseFloat(ratingInput);
+    // Check range 0-20 inclusive
+    if (isNaN(rating) || rating < 0 || rating > 20) {
+        throw new Error('Invalid userRating. Must be a number between 0 and 20, or null/empty.');
     }
-    return rating;
+    return parseFloat(rating.toFixed(2));
 }
 
 // Helper function to validate status

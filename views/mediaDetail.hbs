@@ -47,9 +47,19 @@
                  <div class="meta-item">
                      <span class="meta-label">Community Rating:</span>
                      <span class="meta-value rating-display">
-                        {{renderStars item.apiRating 10}} ({{item.apiRating}}/10)
+                        {{item.apiRating}}/10
                      </span>
                  </div>
+
+                 {{#if item.userRating}}
+                 <div class="meta-item">
+                     <span class="meta-label">My Rating:</span>
+                     <span class="meta-value">
+                         <span class="my-rating-value">{{item.userRating}}</span>/20
+                     </span>
+                 </div>
+                {{/if}}
+
                  {{/if}}
                  {{!-- External Links --}}
                   <div class="meta-item external-links">

@@ -3,46 +3,62 @@
 <div class="container error-message">{{homeError}}</div>
 {{/if}}
 
-{{!-- Horizontal Navigation Bar --}}
-<nav class="horizontal-nav container">
-    {{!-- Use buttons or links to filter content (JS needed) or navigate --}}
-    <button class="nav-item active" data-filter="all">All</button>
-    <button class="nav-item" data-filter="movie">Movies</button>
-    <button class="nav-item" data-filter="series">Series</button>
-    <button class="nav-item" data-filter="book">Books</button>
-    <button class="nav-item" data-filter="video game">Video Games</button>
+{{!-- Tab Navigation Bar --}}
+<nav class="horizontal-nav container homepage-tabs">
+    {{!-- Use data-type attribute for JS targeting --}}
+    <button class="nav-item {{#eq initialTab 'movie'}}active{{/eq}}" data-type="movie">Movies</button>
+    <button class="nav-item {{#eq initialTab 'series'}}active{{/eq}}" data-type="series">Series</button>
+    <button class="nav-item {{#eq initialTab 'book'}}active{{/eq}}" data-type="book">Books</button>
+    <button class="nav-item {{#eq initialTab 'video game'}}active{{/eq}}" data-type="video game">Video Games</button>
 </nav>
 
-{{!-- Hottest Section (Placeholder) --}}
-<section class="media-carousel-section container">
-    <h2 class="section-title">🔥 Hottest Right Now</h2>
-    <div class="swiper media-swiper">
-        <div class="swiper-wrapper">
-            {{#each hottest}}
-             <div class="swiper-slide">
-                {{> mediaCard items=(list this) }} {{!-- Pass single item as list --}}
-             </div>
-            {{/each}}
-        </div>
-        <div class="swiper-button-prev"></div>
-        <div class="swiper-button-next"></div>
-        {{!-- <div class="swiper-pagination"></div> --}}
+{{!-- Tab Content Area --}}
+<div class="tab-content-area container">
+    {{!-- Panel for Movies (Rendered Server-Side) --}}
+    <div class="tab-content {{#unless (eq initialTab 'movie')}}hidden{{/unless}}" data-type="movie">
+        {{#if hottest.length}}
+            <section class="media-carousel-section">
+                <h2 class="section-title">🔥 Hottest Movies</h2>
+                <div class="swiper media-swiper"> <div class="swiper-wrapper"> {{#each hottest}} <div class="swiper-slide">{{> mediaCard items=(list this)}}</div>{{/each}} </div> <div class="swiper-button-prev"></div> <div class="swiper-button-next"></div> </div>
+            </section>
+            <section class="media-carousel-section">
+                <h2 class="section-title">✨ Recommended Movies</h2>
+                <div class="swiper media-swiper"> <div class="swiper-wrapper"> {{#each recommendations}} <div class="swiper-slide">{{> mediaCard items=(list this)}}</div>{{/each}} </div> <div class="swiper-button-prev"></div> <div class="swiper-button-next"></div> </div>
+            </section>
+        {{else}}
+             {{#unless homeError}} {{!-- Show placeholder only if no error occurred for this tab --}}
+                 <p class="placeholder-text">Could not load movie data.</p>
+             {{/unless}}
+        {{/if}}
     </div>
-</section>
 
-{{!-- In Your Watchlist Section --}}
-{{#if user}} {{!-- Only show if logged in --}}
+    {{!-- Panel for Series (Initially Hidden, Loaded by JS) --}}
+    <div class="tab-content hidden" data-type="series">
+        {{!-- Loading indicator or content added by JS --}}
+        <div class="loading-placeholder">Loading Series...</div>
+    </div>
+
+    {{!-- Panel for Books (Initially Hidden, Loaded by JS) --}}
+    <div class="tab-content hidden" data-type="book">
+        <div class="loading-placeholder">Loading Books...</div>
+    </div>
+
+    {{!-- Panel for Video Games (Initially Hidden, Loaded by JS) --}}
+    <div class="tab-content hidden" data-type="video game">
+        <div class="loading-placeholder">Loading Video Games...</div>
+    </div>
+</div>
+
+{{!-- Watchlist Section (Remains below tabs) --}}
+{{#if user}}
 <section class="media-carousel-section container">
     <h2 class="section-title">📑 In Your Watchlist (Planned)</h2>
      {{#if watchlist.length}}
     <div class="swiper media-swiper">
         <div class="swiper-wrapper">
-             {{!-- Render watchlist items using mediaCard partial --}}
-             {{!-- The 'watchlist' variable comes from viewRoutes.js --}}
             {{#each watchlist}}
             <div class="swiper-slide">
-                 {{!-- Need to adapt watchlist data if structure differs from mediaCard expectation --}}
-                {{> mediaCard items=(list this) userStatus='planned' }} {{!-- Override status visually for this section --}}
+                 {{> mediaCard items=(list this) userStatus='planned' }}
              </div>
             {{/each}}
         </div>
@@ -54,23 +70,3 @@
     {{/if}}
 </section>
 {{/if}}
-
-
-{{!-- Recommendation Section (Placeholder) --}}
-<section class="media-carousel-section container">
-    <h2 class="section-title">✨ Recommendations For You</h2>
-     <div class="swiper media-swiper">
-        <div class="swiper-wrapper">
-            {{#each recommendations}}
-            <div class="swiper-slide">
-                 {{> mediaCard items=(list this) }}
-             </div>
-            {{/each}}
-        </div>
-        <div class="swiper-button-prev"></div>
-        <div class="swiper-button-next"></div>
-    </div>
-</section>
-
-{{!-- Helper function to wrap single item in list for partial --}}
-{{#*inline "list"}}[{{> (lookup . '0')}}] {{/inline}}

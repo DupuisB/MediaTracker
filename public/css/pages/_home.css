@@ -13,3 +13,44 @@
     padding-bottom: var(--space-sm);
     border-bottom: 1px solid var(--color-divider);
 }
+
+/* Add to public/css/pages/_home.css or similar */
+.homepage-tabs {
+    /* Styles already likely exist in _navigation.css for .horizontal-nav */
+    /* Ensure active state is visually distinct */
+    margin-bottom: var(--space-lg); /* Space between tabs and content */
+}
+.homepage-tabs .nav-item.active {
+    /* Styles likely exist, ensure they are applied */
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.tab-content-area {
+    /* Container for tab panels */
+}
+
+.tab-content {
+    /* Styles for individual panels */
+    padding-top: var(--space-md); /* Add some space within the panel */
+    border-top: 1px solid var(--color-divider); /* Optional visual separator */
+    margin-top: -1px; /* Overlap border slightly */
+}
+
+.tab-content.hidden {
+    display: none;
+}
+
+/* Add to public/css/base/_base.css or components/_spinner.css */
+.loading-placeholder {
+    text-align: center;
+    padding: var(--space-xl) var(--space-md);
+    color: var(--color-text-light);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    font-style: italic;
+    min-height: 200px; /* Ensure it takes some space */
+    justify-content: center;
+}

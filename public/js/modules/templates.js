@@ -38,16 +38,6 @@ function setupHandlebarsHelpers() {
                 default: return '';
             }
         },
-        renderStars: (rating, maxRating = 10) => {
-            let starsHtml = '';
-            const filledStars = Math.round(parseFloat(rating));
-            const safeMaxRating = parseInt(maxRating, 10) || 10;
-            if (isNaN(filledStars)) return '';
-            for (let i = 1; i <= safeMaxRating; i++) {
-                starsHtml += `<span class="star ${i <= filledStars ? 'filled' : ''}">★</span>`;
-            }
-            return new Handlebars.SafeString(starsHtml);
-        },
         isOwner: (resourceOwnerId, loggedInUserId) => resourceOwnerId === loggedInUserId,
         list: function() { return Array.from(arguments).slice(0, -1); }
     };

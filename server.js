@@ -15,8 +15,9 @@ const authApiRoutes = require('./routes/api/authRoutes');
 const searchApiRoutes = require('./routes/api/searchRoutes');
 const detailsApiRoutes = require('./routes/api/detailsRoutes');
 const libraryApiRoutes = require('./routes/api/libraryRoutes');
-const profileApiRoutes = require('./routes/api/profileRoutes'); // New
-const listApiRoutes = require('./routes/api/listRoutes'); // New
+const profileApiRoutes = require('./routes/api/profileRoutes');
+const listApiRoutes = require('./routes/api/listRoutes');
+const homepageDataApiRoutes = require('./routes/api/homepageDataRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -56,15 +57,6 @@ app.engine('hbs', engine({
                 case 'dropped': return 'outline-grey';
                 default: return '';
             }
-        },
-        // Helper for star rating display (can be enhanced)
-        renderStars: (rating, maxRating = 10) => {
-            let starsHtml = '';
-            const filledStars = Math.round(rating); // Simple rounding for now
-            for (let i = 1; i <= maxRating; i++) {
-                starsHtml += `<span class="star ${i <= filledStars ? 'filled' : ''}">★</span>`;
-            }
-            return starsHtml;
         },
         // Helper to check if user owns the profile/list (for showing edit buttons etc)
         isOwner: (resourceOwnerId, loggedInUserId) => resourceOwnerId === loggedInUserId,
@@ -114,8 +106,9 @@ app.use('/api/auth', authApiRoutes);
 app.use('/api/search', searchApiRoutes);
 app.use('/api/details', detailsApiRoutes);
 app.use('/api/library', libraryApiRoutes);
-app.use('/api/profile', profileApiRoutes); // New
-app.use('/api/lists', listApiRoutes); // New
+app.use('/api/profile', profileApiRoutes);
+app.use('/api/lists', listApiRoutes);
+app.use('/api/homepage-data', homepageDataApiRoutes);
 
 // --- Error Handling (Keep existing handlers) ---
 
