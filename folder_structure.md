@@ -54,6 +54,7 @@
             - modules/
                 - api.js
                 - authHandlers.js
+                - homepageHandlers.js
                 - libraryHandlers.js
                 - listHandlers.js
                 - profileHandlers.js
@@ -65,6 +66,7 @@
         - api/
             - authRoutes.js
             - detailsRoutes.js
+            - homepageDataRoutes.js
             - igdbAuthHelper.js
             - libraryRoutes.js
             - listRoutes.js
@@ -236,7 +238,7 @@ const path = require('path');
 const util = require('util'); // Import the util module
 
 // Define the path to the database file
-const dbPath = path.resolve(__dirname, 'watchlist_v2.db'); // New DB file name
+const dbPath = path.resolve(__dirname, 'watchlist_v2.db'); // Existing DB file name
 
 // Create or open the database
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -245,7 +247,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
         process.exit(1); // Exit if DB can't be opened
     } else {
         console.log('Connected to the SQLite database (v2).');
-        initializeDatabaseV2(); // Call the updated init function
+        initializeDatabaseV2(); // Call the initialization function
     }
 });
 
@@ -256,7 +258,7 @@ db.runAsync = function(sql, params = []) {
     return new Promise((resolve, reject) => {
         this.run(sql, params, function(err) {
             if (err) {
-                console.error('DB Run Error:', err.message, 'SQL:', sql);
+                console.error('DB Run Error:', err.message, 'SQL:', sql.substring(0, 100) + (sql.length > 100 ? '...' : '')); // Log SQL snippet
                 // Handle specific errors like UNIQUE constraint
                 if (err.message.includes('UNIQUE constraint failed')) {
                     return reject(new Error('UNIQUE constraint failed. Item might already exist.'));
@@ -273,64 +275,62 @@ db.runAsync = function(sql, params = []) {
 }.bind(db);
 
 
-// Function to initialize the NEW database schema
+// Function to initialize the database schema IF TABLES DO NOT EXIST
 function initializeDatabaseV2() {
     db.serialize(() => {
         try {
-            console.log("Initializing Database Schema V2...");
+            console.log("Checking/Initializing Database Schema V2...");
 
-            // 1. Users Table (Remains the same)
+            // 1. Users Table (Uses IF NOT EXISTS - Safe)
             db.run(`
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
                     passwordHash TEXT NOT NULL,
                     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    -- Profile fields (can be expanded later)
                     profileImageUrl TEXT,
                     profilePrivacy TEXT DEFAULT 'private' CHECK(profilePrivacy IN ('public', 'private'))
                 )
             `);
             console.log('- Users table checked/created.');
 
-            // 2. Library Items Table (Updated based on UserMediaInteraction)
-            db.run(`DROP TABLE IF EXISTS library_items;`); // Drop old table for clean setup
+            // 2. Library Items Table (Uses IF NOT EXISTS - Safe)
+            // --- REMOVED: db.run(`DROP TABLE IF EXISTS library_items;`); ---
             db.run(`
                 CREATE TABLE IF NOT EXISTS library_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     userId INTEGER NOT NULL,
                     mediaType TEXT NOT NULL CHECK(mediaType IN ('movie', 'series', 'book', 'video game')),
-                    mediaId TEXT NOT NULL, -- ID from external API (TMDB, Google Books, IGDB)
+                    mediaId TEXT NOT NULL, -- ID from external API
 
-                    -- Core details stored at time of adding (can be updated if needed)
+                    -- Core details stored at time of adding
                     title TEXT NOT NULL,
                     imageUrl TEXT,
-                    releaseYear INTEGER, -- Store just the year for consistency
+                    releaseYear INTEGER,
 
                     -- User-specific interaction data
-                    userStatus TEXT NOT NULL DEFAULT 'planned' CHECK(userStatus IN ('planned', 'watching', 'completed', 'paused', 'dropped')), -- Changed statuses
-                    userRating INTEGER CHECK(userRating IS NULL OR (userRating >= 1 AND userRating <= 10)), -- Changed rating scale (e.g., 1-10 stars)
-                    userNotes TEXT, -- Renamed from userDescription
-                    isFavorite BOOLEAN DEFAULT 0, -- Favorite flag
+                    userStatus TEXT NOT NULL DEFAULT 'planned' CHECK(userStatus IN ('planned', 'watching', 'completed', 'paused', 'dropped')),
+                    userRating REAL CHECK(userRating IS NULL OR (userRating >= 0 AND userRating <= 20)), -- Use REAL for decimals 0-20
+                    userNotes TEXT,
+                    isFavorite BOOLEAN DEFAULT 0,
 
                     -- Timestamps
                     addedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    completedAt DATETIME, -- Timestamp when marked as completed
+                    completedAt DATETIME,
 
                     FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
-                    UNIQUE(userId, mediaType, mediaId) -- Prevent adding the same item multiple times per user
+                    UNIQUE(userId, mediaType, mediaId)
                 )
             `);
-            console.log('- Library Items table created.');
+            console.log('- Library Items table checked/created.');
 
-            // Index for faster library lookups
+            // Index for faster library lookups (Uses IF NOT EXISTS - Safe)
             db.run(`CREATE INDEX IF NOT EXISTS idx_library_user_status ON library_items (userId, userStatus);`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_library_user_favorite ON library_items (userId, isFavorite);`);
-            console.log('- Library Items indexes created.');
+            console.log('- Library Items indexes checked/created.');
 
-
-            // 3. User Lists Table
+            // 3. User Lists Table (Uses IF NOT EXISTS - Safe)
             db.run(`
                 CREATE TABLE IF NOT EXISTS user_lists (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -345,31 +345,28 @@ function initializeDatabaseV2() {
                     FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
                 )
             `);
-            console.log('- User Lists table created.');
+            console.log('- User Lists table checked/created.');
 
-            // 4. User List Items Table
+            // 4. User List Items Table (Uses IF NOT EXISTS - Safe)
             db.run(`
                 CREATE TABLE IF NOT EXISTS user_list_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     listId INTEGER NOT NULL,
-                    libraryItemId INTEGER NOT NULL, -- Link to the entry in the user's library
-                    userComment TEXT, -- Comment specific to this item *in this list*
-                    -- progressStatus TEXT, -- Removed, progress tracked on library_item
-                    -- userRatingInList INTEGER, -- Removed, rating tracked on library_item
+                    libraryItemId INTEGER NOT NULL,
+                    userComment TEXT,
                     dateAdded DATETIME DEFAULT CURRENT_TIMESTAMP,
 
                     FOREIGN KEY (listId) REFERENCES user_lists (id) ON DELETE CASCADE,
                     FOREIGN KEY (libraryItemId) REFERENCES library_items (id) ON DELETE CASCADE,
-                    UNIQUE(listId, libraryItemId) -- Prevent adding same library item multiple times to the same list
+                    UNIQUE(listId, libraryItemId)
                 )
             `);
-            console.log('- User List Items table created.');
-
+            console.log('- User List Items table checked/created.');
 
             // --- Triggers for updatedAt ---
-            // Drop old trigger if exists
+            // Drop old triggers first (needed if definition changes) then create.
+            // This pattern is generally safe as it doesn't affect table data.
             db.run(`DROP TRIGGER IF EXISTS update_library_item_timestamp;`);
-            // Library Items Trigger
             db.run(`
                 CREATE TRIGGER update_library_item_timestamp
                 AFTER UPDATE ON library_items
@@ -378,7 +375,7 @@ function initializeDatabaseV2() {
                     UPDATE library_items SET updatedAt = CURRENT_TIMESTAMP WHERE id = OLD.id;
                 END;
             `);
-             // User Lists Trigger
+
              db.run(`DROP TRIGGER IF EXISTS update_user_list_timestamp;`);
              db.run(`
                 CREATE TRIGGER update_user_list_timestamp
@@ -400,7 +397,7 @@ function initializeDatabaseV2() {
 }
 
 // Export the db object with the added Async methods
-module.exports = db; // dbUtils is no longer needed as promises are added directly
+module.exports = db;
 ```
 
 ### package.json
@@ -463,8 +460,9 @@ const authApiRoutes = require('./routes/api/authRoutes');
 const searchApiRoutes = require('./routes/api/searchRoutes');
 const detailsApiRoutes = require('./routes/api/detailsRoutes');
 const libraryApiRoutes = require('./routes/api/libraryRoutes');
-const profileApiRoutes = require('./routes/api/profileRoutes'); // New
-const listApiRoutes = require('./routes/api/listRoutes'); // New
+const profileApiRoutes = require('./routes/api/profileRoutes');
+const listApiRoutes = require('./routes/api/listRoutes');
+const homepageDataApiRoutes = require('./routes/api/homepageDataRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -504,15 +502,6 @@ app.engine('hbs', engine({
                 case 'dropped': return 'outline-grey';
                 default: return '';
             }
-        },
-        // Helper for star rating display (can be enhanced)
-        renderStars: (rating, maxRating = 10) => {
-            let starsHtml = '';
-            const filledStars = Math.round(rating); // Simple rounding for now
-            for (let i = 1; i <= maxRating; i++) {
-                starsHtml += `<span class="star ${i <= filledStars ? 'filled' : ''}">★</span>`;
-            }
-            return starsHtml;
         },
         // Helper to check if user owns the profile/list (for showing edit buttons etc)
         isOwner: (resourceOwnerId, loggedInUserId) => resourceOwnerId === loggedInUserId,
@@ -562,8 +551,9 @@ app.use('/api/auth', authApiRoutes);
 app.use('/api/search', searchApiRoutes);
 app.use('/api/details', detailsApiRoutes);
 app.use('/api/library', libraryApiRoutes);
-app.use('/api/profile', profileApiRoutes); // New
-app.use('/api/lists', listApiRoutes); // New
+app.use('/api/profile', profileApiRoutes);
+app.use('/api/lists', listApiRoutes);
+app.use('/api/homepage-data', homepageDataApiRoutes);
 
 // --- Error Handling (Keep existing handlers) ---
 
@@ -925,10 +915,6 @@ p {
     --color-status-planned: #f56565;   /* Red */
     --color-status-paused: #ecc94b;    /* Yellow */
     --color-status-dropped: #a0aec0;   /* Grey */
-
-    /* Star Rating */
-    --color-star-filled: #f5a623; /* Gold */
-    --color-star-empty: #d1d5db; /* Light Grey */
 
     /* --- Fonts --- */
     --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
@@ -2289,6 +2275,47 @@ footer {
     padding-bottom: var(--space-sm);
     border-bottom: 1px solid var(--color-divider);
 }
+
+/* Add to public/css/pages/_home.css or similar */
+.homepage-tabs {
+    /* Styles already likely exist in _navigation.css for .horizontal-nav */
+    /* Ensure active state is visually distinct */
+    margin-bottom: var(--space-lg); /* Space between tabs and content */
+}
+.homepage-tabs .nav-item.active {
+    /* Styles likely exist, ensure they are applied */
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.tab-content-area {
+    /* Container for tab panels */
+}
+
+.tab-content {
+    /* Styles for individual panels */
+    padding-top: var(--space-md); /* Add some space within the panel */
+    border-top: 1px solid var(--color-divider); /* Optional visual separator */
+    margin-top: -1px; /* Overlap border slightly */
+}
+
+.tab-content.hidden {
+    display: none;
+}
+
+/* Add to public/css/base/_base.css or components/_spinner.css */
+.loading-placeholder {
+    text-align: center;
+    padding: var(--space-xl) var(--space-md);
+    color: var(--color-text-light);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-md);
+    font-style: italic;
+    min-height: 200px; /* Ensure it takes some space */
+    justify-content: center;
+}
 ```
 
 ### _lists.css
@@ -2548,17 +2575,38 @@ footer {
 .meta-value {
     color: var(--color-text-light);
 }
-.rating-display .star {
-     font-size: 1.1em;
-     color: var(--color-star-empty);
-}
-.rating-display .star.filled {
-    color: var(--color-star-filled);
-}
 .external-links a {
     margin-right: var(--space-md);
     font-weight: var(--font-weight-medium);
     display: inline-block;
+}
+
+.detail-trailer-section {
+    /* Optional: Add specific padding/margin if needed */
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
+}
+.detail-trailer-section h3 {
+    margin-top: 0;
+    margin-bottom: var(--space-md);
+}
+
+/* Responsive Video Container */
+.video-responsive {
+    overflow: hidden;
+    padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+    position: relative;
+    height: 0;
+    border-radius: var(--border-radius-sm); /* Optional: round corners */
+}
+
+.video-responsive iframe {
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    border: none; /* Override default iframe border */
 }
 
 
@@ -2924,6 +2972,7 @@ import { initSwipers } from './modules/swiperSetup.js';
 import { initMediaDetailInteraction, handleLibraryItemFormSubmit } from './modules/libraryHandlers.js';
 import { initListInteractions, handleListFormSubmit } from './modules/listHandlers.js';
 import { initProfileInteractions } from './modules/profileHandlers.js';
+import { initHomepageTabs } from './modules/homepageHandlers.js';
 import { closeModal, deleteConfirmModal, formModal, handleDeleteConfirm } from './modules/ui.js';
 
 (function () {
@@ -2982,57 +3031,27 @@ import { closeModal, deleteConfirmModal, formModal, handleDeleteConfirm } from '
 
         // Homepage specific listeners
         if (path === '/') {
-            document.querySelector('.horizontal-nav')?.addEventListener('click', (event) => {
-                if (event.target.matches('.nav-item')) {
-                    const filter = event.target.dataset.filter;
-                    console.log("Homepage Filter selected:", filter); // TODO: Implement filtering
-                    document.querySelectorAll('.horizontal-nav .nav-item').forEach(el => el.classList.remove('active'));
-                    event.target.classList.add('active');
-                }
-            });
+            initHomepageTabs();
+            initSwipers();
+        } else if (path.startsWith('/profile') || path.startsWith('/media/')) {
+            initSwipers();
         }
 
         // Login/Register Page (Handled by initAuthListeners)
         // Search Results Page
+        if (path.startsWith('/media/') && pathParts.length === 3) { initMediaDetailInteraction(); }
+        if (path.startsWith('/profile')) { initProfileInteractions(); }
+        if (path === '/lists') { initListInteractions(); }
+        if (path.startsWith('/lists/') && pathParts.length === 2) { initListInteractions(); }
+        // Keep search results nav handler or integrate into a search specific module
         if (path === '/search') {
             const searchNav = document.querySelector('.search-nav');
-            searchNav?.addEventListener('click', (event) => { // Directly add filter logic here or import if complex
-                 const target = event.target;
-                 if (!target.matches('.search-nav .nav-item')) return;
-                 const filter = target.dataset.filter;
-                 const resultsArea = document.getElementById('search-results-area');
-                 if (!resultsArea) return;
-                 target.closest('.search-nav').querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
-                 target.classList.add('active');
-                 resultsArea.querySelectorAll('.results-category').forEach(section => {
-                     section.style.display = (filter === 'all' || section.dataset.category === filter) ? '' : 'none';
-                 });
-            });
-            // Apply 'All' filter on load
+            searchNav?.addEventListener('click', handleSearchNavFilter);
+            // Apply 'All' filter on load if needed
             const allButton = searchNav?.querySelector('.nav-item[data-filter="all"]');
             if (allButton && allButton.classList.contains('active')) {
-                 handleSearchNavFilter({ target: allButton }); // Apply 'All' filter on load
+                handleSearchNavFilter({ target: allButton });
             }
-        }
-
-        // Media Detail Page
-        if (path.startsWith('/media/') && pathParts.length === 3) {
-            initMediaDetailInteraction();
-        }
-
-         // Profile Page
-         if (path.startsWith('/profile')) {
-            initProfileInteractions();
-        }
-
-        // Lists Overview Page
-        if (path === '/lists') {
-            initListInteractions();
-        }
-
-        // List Detail Page
-        if (path.startsWith('/lists/') && pathParts.length === 2) {
-            initListInteractions();
         }
     }
 
@@ -3168,7 +3187,6 @@ import { showStatusMessage, showSpinner } from './ui.js';
  */
 async function handleLogin(event) {
     event.preventDefault();
-    console.log("handleLogin executed");
     const form = event.target;
     const username = form.username.value.trim();
     const password = form.password.value.trim();
@@ -3293,6 +3311,146 @@ function initAuthListeners() {
 }
 
 export { initAuthListeners };
+```
+
+### homepageHandlers.js
+
+```js
+// public/js/modules/homepageHandlers.js
+import { apiRequest } from './api.js';
+import { getTemplate } from './templates.js';
+import { initSwipers } from './swiperSetup.js'; // Import Swiper setup
+
+const tabContainer = document.querySelector('.homepage-tabs');
+const contentArea = document.querySelector('.tab-content-area');
+let templates = {}; // Cache for Handlebars partials
+
+async function loadTemplates() {
+    // Pre-load necessary templates
+    templates.mediaCard = await getTemplate('mediaCard');
+    // Add others if needed
+}
+
+function renderContent(type, data) {
+    const panel = contentArea.querySelector(`.tab-content[data-type="${type}"]`);
+    if (!panel) return;
+
+    if (!templates.mediaCard) {
+        console.error("Media card template not loaded.");
+        panel.innerHTML = '<p class="error-message">Error rendering content.</p>';
+        return;
+    }
+    if (!data || !data.hottest || !data.recommendations) {
+         panel.innerHTML = `<p class="placeholder-text">Could not load data for ${type}.</p>`;
+         return;
+    }
+
+    // Using the same data for Hottest and Recommendations as requested
+    let hottestHtml = '';
+    if (data.hottest.length > 0) {
+        hottestHtml = `
+            <section class="media-carousel-section">
+                <h2 class="section-title">🔥 Hottest ${capitalize(type)}</h2>
+                <div class="swiper media-swiper">
+                    <div class="swiper-wrapper">
+                        ${data.hottest.map(item => `<div class="swiper-slide">${templates.mediaCard({ items: [item] })}</div>`).join('')}
+                    </div>
+                    <div class="swiper-button-prev"></div>
+                    <div class="swiper-button-next"></div>
+                </div>
+            </section>
+        `;
+    } else {
+         hottestHtml = `<p class="placeholder-text">No hottest ${type} found.</p>`;
+    }
+
+
+    let recommendationsHtml = '';
+     if (data.recommendations.length > 0) {
+         recommendationsHtml = `
+            <section class="media-carousel-section">
+                <h2 class="section-title">✨ Recommended ${capitalize(type)}</h2>
+                <div class="swiper media-swiper">
+                    <div class="swiper-wrapper">
+                         ${data.recommendations.map(item => `<div class="swiper-slide">${templates.mediaCard({ items: [item] })}</div>`).join('')}
+                    </div>
+                    <div class="swiper-button-prev"></div>
+                    <div class="swiper-button-next"></div>
+                </div>
+            </section>
+        `;
+     } else {
+         recommendationsHtml = `<p class="placeholder-text">No recommended ${type} found.</p>`;
+     }
+
+
+    panel.innerHTML = hottestHtml + recommendationsHtml; // Combine sections
+
+    // Re-initialize swipers AFTER new content is added
+    initSwipers();
+}
+
+async function fetchHomepageData(type) {
+    const panel = contentArea.querySelector(`.tab-content[data-type="${type}"]`);
+    if (!panel || panel.dataset.loaded === 'true') return; // Already loaded or panel missing
+
+    panel.innerHTML = `<div class="loading-placeholder">Loading ${capitalize(type)}... <div class="spinner"></div></div>`; // Show loader
+
+    try {
+        const data = await apiRequest(`/homepage-data?type=${type}`);
+        renderContent(type, data);
+        panel.dataset.loaded = 'true'; // Mark as loaded
+    } catch (error) {
+        console.error(`Failed to fetch homepage data for ${type}:`, error);
+        panel.innerHTML = `<p class="error-message">Could not load ${type} data. ${error.message || ''}</p>`;
+        panel.dataset.loaded = 'error'; // Mark as failed
+    }
+}
+
+function handleTabClick(event) {
+    const targetTab = event.target.closest('.nav-item');
+    if (!targetTab || !tabContainer.contains(targetTab)) return;
+
+    const type = targetTab.dataset.type;
+    if (!type) return;
+
+    // Update tab active state
+    tabContainer.querySelectorAll('.nav-item').forEach(tab => tab.classList.remove('active'));
+    targetTab.classList.add('active');
+
+    // Hide all content panels
+    contentArea.querySelectorAll('.tab-content').forEach(panel => panel.classList.add('hidden'));
+
+    // Show the target panel
+    const targetPanel = contentArea.querySelector(`.tab-content[data-type="${type}"]`);
+    if (targetPanel) {
+        targetPanel.classList.remove('hidden');
+        // Fetch data if it hasn't been loaded yet
+        if (targetPanel.dataset.loaded !== 'true' && targetPanel.dataset.loaded !== 'error') {
+             fetchHomepageData(type);
+        }
+    } else {
+        console.warn(`Content panel not found for type: ${type}`);
+    }
+}
+
+function capitalize(str) {
+     if (typeof str !== 'string' || str.length === 0) return str;
+     // Handle "video game" specifically
+     if (str === 'video game') return 'Video Games';
+     return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+
+async function initHomepageTabs() {
+    if (!tabContainer || !contentArea) return; // Don't run if elements aren't present
+    console.log("Initializing homepage tabs...");
+    await loadTemplates(); // Load Handlebars partials first
+    tabContainer.addEventListener('click', handleTabClick);
+    // Ensure initial Swipers (for server-rendered content) are initialized by main.js
+}
+
+export { initHomepageTabs };
 ```
 
 ### libraryHandlers.js
@@ -3631,7 +3789,7 @@ async function handleListFormSubmit(event) {
          if (window.location.pathname === '/lists') { // Reload only on overview page
             setTimeout(() => window.location.reload(), 500);
          } else if (window.location.pathname.startsWith('/lists/')) { // Or update detail page title?
-             document.querySelector('.list-info h1')?.textContent = result.title;
+             document.querySelector('.list-info h1').textContent = result.title || 'Untitled List';
              // Update other details if necessary
          }
     } catch (error) {
@@ -3834,7 +3992,7 @@ function initListInteractions() {
     }
 }
 
-export { initListInteractions };
+export { initListInteractions, handleListFormSubmit, handleCreateListClick, handleEditListClick, handleDeleteListClick, handleAddToListFormSubmit, handleRemoveListItemClick, handleEditListItemCommentClick, handleCancelEditListItemCommentClick, handleListItemCommentFormSubmit };
 ```
 
 ### profileHandlers.js
@@ -3984,16 +4142,6 @@ function setupHandlebarsHelpers() {
                 case 'dropped': return 'outline-grey';
                 default: return '';
             }
-        },
-        renderStars: (rating, maxRating = 10) => {
-            let starsHtml = '';
-            const filledStars = Math.round(parseFloat(rating));
-            const safeMaxRating = parseInt(maxRating, 10) || 10;
-            if (isNaN(filledStars)) return '';
-            for (let i = 1; i <= safeMaxRating; i++) {
-                starsHtml += `<span class="star ${i <= filledStars ? 'filled' : ''}">★</span>`;
-            }
-            return new Handlebars.SafeString(starsHtml);
         },
         isOwner: (resourceOwnerId, loggedInUserId) => resourceOwnerId === loggedInUserId,
         list: function() { return Array.from(arguments).slice(0, -1); }
@@ -4279,57 +4427,59 @@ const mapTmdbToCardData = (item) => ({
 // Homepage (Refactored with TMDB Trending)
 router.get('/', async (req, res, next) => {
     let watchlistItems = [];
-    let trendingMovies = [];
-    let homeError = null; // Initialize error message
+    let initialHottest = []; // For the default tab (Movies)
+    let initialRecommendations = []; // For the default tab (Movies)
+    let homeError = null;
+    const defaultTabType = 'movie'; // Set default tab
 
     // 1. Fetch User's Watchlist (Planned Items) if logged in
     if (res.locals.user) {
         try {
             const apiUrl = getApiUrl(req);
-            const response = await axios.get(`${apiUrl}/library?userStatus=planned`, {
-                headers: { Cookie: req.headers.cookie } // Forward cookie for auth
+            // Fetch planned items, sorted by update time, limited
+            const response = await axios.get(`${apiUrl}/library?userStatus=planned&sortBy=updatedAt&limit=12`, {
+                headers: { Cookie: req.headers.cookie }
             });
             watchlistItems = response.data;
         } catch (error) {
             console.error("Homepage Watchlist Fetch Error:", error.response?.data || error.message);
-            homeError = "Could not load your watchlist."; // Set error message but continue
+            homeError = "Could not load your watchlist.";
         }
     }
 
-    // 2. Fetch Trending Movies from TMDB
-    if (TMDB_API_KEY) {
-        try {
-            const trendingUrl = `${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&language=en-US`;
-            const trendingResponse = await axios.get(trendingUrl);
-            // Take top 10-12 trending movies and map them
-            trendingMovies = trendingResponse.data.results.slice(0, 12).map(mapTmdbToCardData);
-        } catch (error) {
-            console.error("Homepage TMDB Trending Fetch Error:", error.response?.data || error.message);
-            // Set error message if trending fetch fails, but keep placeholders if watchlist also failed
-            homeError = homeError ? `${homeError} Also failed to load trending movies.` : "Could not load trending movies.";
-            // Fallback to empty array if fetch fails
-            trendingMovies = [];
-        }
-    } else {
-        console.warn("TMDB_API_KEY missing. Cannot fetch trending movies for homepage.");
-        homeError = homeError ? `${homeError} Also missing TMDB API Key for trending.` : "Trending movies unavailable (missing API key).";
-        trendingMovies = []; // Use empty array if key is missing
+    // 2. Fetch Initial Tab Data (Movies - Popular) from our new API endpoint
+    try {
+        const apiUrl = getApiUrl(req);
+        const response = await axios.get(`${apiUrl}/homepage-data?type=${defaultTabType}`, {
+             headers: { Cookie: req.headers.cookie } // May not be needed if endpoint is public
+        });
+        initialHottest = response.data.hottest || [];
+        initialRecommendations = response.data.recommendations || [];
+    } catch (error) {
+        console.error(`Homepage Initial Tab (${defaultTabType}) Fetch Error:`, error.response?.data || error.message);
+        const errorMsg = `Could not load initial ${defaultTabType} data.`;
+        homeError = homeError ? `${homeError} ${errorMsg}` : errorMsg;
+        // Keep empty arrays on error
+        initialHottest = [];
+        initialRecommendations = [];
     }
+
 
     // 3. Render the page
     try {
         res.render('home', {
             pageTitle: 'Home',
-            // Use trending movies for both sections if available, otherwise empty array
-            hottest: trendingMovies.length > 0 ? trendingMovies : [],
+            // Pass only the initially loaded data
+            initialTab: defaultTabType, // Inform template which tab is active
+            hottest: initialHottest,
+            recommendations: initialRecommendations,
             watchlist: watchlistItems, // User's actual watchlist ('planned' status)
-            recommendations: trendingMovies.length > 0 ? trendingMovies : [],
             homeError: homeError, // Pass any accumulated errors
             // user is already in res.locals
         });
     } catch (renderError) {
          console.error("Homepage Render Error:", renderError);
-         next(renderError); // Pass rendering errors to the main error handler
+         next(renderError);
     }
 });
 
@@ -4502,59 +4652,65 @@ router.get('/profile/:username', requireLogin, async (req, res, next) => {
         next(error);
     }
 });
-// Helper function to render profile page (to avoid code duplication) - Keep as is
+
 async function renderProfilePage(req, res, next, profileUserId) {
-     const loggedInUserId = res.locals.user.id;
-     const isOwnProfile = profileUserId === loggedInUserId;
-     const apiUrl = getApiUrl(req);
+    const loggedInUserId = res.locals.user.id;
+    const isOwnProfile = profileUserId === loggedInUserId;
+    const apiUrl = getApiUrl(req);
+    const itemsPerList = 12; // How many items to show per default list
 
-     try {
-        // Fetch profile data (basic info + stats)
-        const profileResponse = await axios.get(`${apiUrl}/profile/${profileUserId}`, {
-            headers: { Cookie: req.headers.cookie } // Auth needed
-        });
-        const profileData = profileResponse.data;
+    try {
+       // Fetch profile data (basic info + stats) - KEEP AS IS
+       const profileResponse = await axios.get(`${apiUrl}/profile/${profileUserId}`, {
+           headers: { Cookie: req.headers.cookie } // Auth needed
+       });
+       const profileData = profileResponse.data;
 
-        // Fetch 'Last Seen' (e.g., recently completed items) - Limit to 5-10
-        const lastSeenResponse = await axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=completed&sortBy=completedAt&limit=10`, { // Assuming API supports userId and sorting/limit
-            headers: { Cookie: req.headers.cookie }
-        });
-        const lastSeenItems = lastSeenResponse.data;
+       // --- NEW: Fetch Default Library Lists ---
+       const listFetchPromises = [
+           // Recently Completed (status=completed, sort=completedAt desc)
+           axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=completed&sortBy=completedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Completed):", e.message); return []; }),
+           // Watchlist (status=planned, sort=updatedAt desc)
+           axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=planned&sortBy=updatedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Planned):", e.message); return []; }),
+           // Currently Engaging (status=watching, sort=updatedAt desc)
+           axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=watching&sortBy=updatedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Watching):", e.message); return []; })
+       ];
 
-         // Fetch 'Favorites' - Limit to 5-10
-        const favoritesResponse = await axios.get(`${apiUrl}/library?userId=${profileUserId}&isFavorite=true&limit=10`, { // Assuming API supports userId and filtering
-            headers: { Cookie: req.headers.cookie }
-        });
-        const favoriteItems = favoritesResponse.data;
-
-         // Fetch 'Public Lists' - Limit to 5-10
-         // Only fetch if profile is public OR it's the user's own profile
-         let publicLists = [];
-         if (profileData.profilePrivacy === 'public' || isOwnProfile) {
-             const listsResponse = await axios.get(`${apiUrl}/lists?userId=${profileUserId}&publicOnly=${profileData.profilePrivacy !== 'public' && !isOwnProfile ? 'true' : 'false'}&limit=10`, { // API needs to support filtering
-                 headers: { Cookie: req.headers.cookie }
-             });
-             publicLists = listsResponse.data; // Assuming API returns list summaries
-         }
+       const [recentlyCompletedItems, plannedItems, watchingItems] = await Promise.all(listFetchPromises);
+       // --- End NEW ---
 
 
-        res.render('userProfile', {
-            pageTitle: `${profileData.username}'s Profile`,
-            profile: profileData,
-            isOwnProfile: isOwnProfile,
-            lastSeen: lastSeenItems,
-            favorites: favoriteItems,
-            publicLists: publicLists,
-             // user (logged in user) is already in res.locals
-        });
-
-     } catch(error) {
-        console.error(`Error rendering profile page for user ${profileUserId}:`, error.response?.data || error.message);
-        if (error.response?.status === 404) {
-            return res.status(404).render('error', { pageTitle: 'Not Found', errorCode: 404, errorMessage: 'User profile data not found.' });
+        // Fetch 'Public Lists' - KEEP AS IS
+        let publicLists = [];
+        if (profileData.profilePrivacy === 'public' || isOwnProfile) {
+            const listsResponse = await axios.get(`${apiUrl}/lists?userId=${profileUserId}&publicOnly=${profileData.profilePrivacy !== 'public' && !isOwnProfile ? 'true' : 'false'}&limit=10`, { // API needs to support filtering
+                headers: { Cookie: req.headers.cookie }
+            });
+            publicLists = listsResponse.data; // Assuming API returns list summaries
         }
-        next(error);
-     }
+
+
+       res.render('userProfile', {
+           pageTitle: `${profileData.username}'s Profile`,
+           profile: profileData,
+           isOwnProfile: isOwnProfile,
+           // --- Pass NEW lists to the template ---
+           recentlyCompletedItems: recentlyCompletedItems,
+           plannedItems: plannedItems,
+           watchingItems: watchingItems,
+           // --- Keep publicLists ---
+           publicLists: publicLists,
+            // user (logged in user) is already in res.locals
+       });
+
+    } catch(error) {
+       console.error(`Error rendering profile page for user ${profileUserId}:`, error.response?.data || error.message);
+       if (error.response?.status === 404) { // Handle profile data 404 specifically
+           return res.status(404).render('error', { pageTitle: 'Not Found', errorCode: 404, errorMessage: 'User profile data not found.' });
+       }
+       // Don't pass generic 404/403 from list fetches here, handle above with default empty arrays
+       next(error);
+    }
 }
 
 // User Lists Overview Page (New) - Keep as is
@@ -4745,10 +4901,11 @@ module.exports = router;
 const express = require('express');
 const axios = require('axios');
 require('dotenv').config();
-const { getIgdbHeaders, convertRatingTo10 } = require('./igdbAuthHelper'); // Use correct helper
+const { getIgdbHeaders, convertRatingTo10 } = require('./igdbAuthHelper');
 
 const router = express.Router();
 
+// --- Constants and Helpers (Keep existing TMDB/Google/IGDB URLs, getYear, fetchData, fetchIgdbData) ---
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -4799,41 +4956,32 @@ const getYear = (dateString) => {
     }
 };
 
-
 // GET /api/details/:mediaType/:mediaId
 router.get('/:mediaType/:mediaId', async (req, res) => {
     const { mediaType, mediaId } = req.params;
     let apiResponseData;
 
-    // Initialize structured details object
+    // Initialize structured details object (ADD bannerImageUrl and trailerVideoId)
     let combinedDetails = {
         mediaId: mediaId,
         mediaType: mediaType,
         title: null,
-        subtitle: null, // e.g., tagline for movies, author/year for books
+        subtitle: null,
         description: null,
-        imageUrl: null, // Larger image for detail view
-        releaseDate: null, // Full date where available
+        imageUrl: null, // Main poster/cover
+        bannerImageUrl: null, // <-- NEW: For backdrop/screenshot
+        trailerVideoId: null, // <-- NEW: For YouTube trailer key
+        releaseDate: null,
         releaseYear: null,
-        apiRating: null, // Normalized 1-10 rating from API
+        apiRating: null,
         genres: [],
         // Specific fields
-        authors: [], // books
-        directors: [], // movies/series (TMDB: Crew job 'Director')
-        screenwriters: [], // movies/series (TMDB: Crew job 'Screenplay', 'Writer')
-        publisher: null, // books, games
-        pageCount: null, // books
-        cast: [], // movies/series (TMDB: Cast), games (IGDB: involved_companies?) - simplified for now
-        platforms: [], // games (IGDB: platforms.name)
-        developers: [], // games (IGDB: involved_companies where developer=true)
+        authors: [], directors: [], screenwriters: [], publisher: null, pageCount: null,
+        cast: [], platforms: [], developers: [],
         // Links
-        imdbId: null, // movies/series
-        googleBooksLink: null, // books
-        igdbLink: null, // games
-        tmdbLink: null, // movies/series
-        // Placeholders for related/reviews - not fetched here
-        relatedMedia: [],
-        reviews: []
+        imdbId: null, googleBooksLink: null, igdbLink: null, tmdbLink: null,
+        // Placeholders
+        relatedMedia: [], reviews: []
     };
 
     try {
@@ -4843,7 +4991,8 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 if (!TMDB_API_KEY) throw new Error('TMDB API Key missing.');
                 const isMovie = mediaType === 'movie';
                 const basePath = isMovie ? 'movie' : 'tv';
-                const detailsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}?api_key=${TMDB_API_KEY}&language=en-US&append_to_response=credits,external_ids`;
+                // MODIFIED: Append 'videos' to get trailer info
+                const detailsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}?api_key=${TMDB_API_KEY}&language=en-US&append_to_response=credits,external_ids,videos`;
 
                 apiResponseData = await fetchData(detailsUrl);
 
@@ -4853,18 +5002,18 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                      return res.status(status).json({ message });
                  }
 
+                // --- Basic Details (keep as before) ---
                 combinedDetails.title = isMovie ? apiResponseData.title : apiResponseData.name;
                 combinedDetails.subtitle = apiResponseData.tagline || null;
                 combinedDetails.description = apiResponseData.overview;
-                combinedDetails.imageUrl = apiResponseData.poster_path ? `https://image.tmdb.org/t/p/w780${apiResponseData.poster_path}` : null; // Larger poster
+                combinedDetails.imageUrl = apiResponseData.poster_path ? `https://image.tmdb.org/t/p/w780${apiResponseData.poster_path}` : null;
                 combinedDetails.releaseDate = isMovie ? apiResponseData.release_date : apiResponseData.first_air_date;
                 combinedDetails.releaseYear = getYear(combinedDetails.releaseDate);
                 combinedDetails.apiRating = convertRatingTo10(apiResponseData.vote_average, 'tmdb');
                 combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
                 combinedDetails.imdbId = apiResponseData.external_ids?.imdb_id || null;
                 combinedDetails.tmdbLink = `https://www.themoviedb.org/${basePath}/${mediaId}`;
-
-                 // Process credits
+                // --- Credits (keep as before) ---
                 if (apiResponseData.credits) {
                     combinedDetails.cast = apiResponseData.credits.cast?.slice(0, 10).map(c => ({ name: c.name, character: c.character, profilePath: c.profile_path })) || []; // Get profile picture path too
                     apiResponseData.credits.crew?.forEach(c => {
@@ -4875,25 +5024,45 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                     combinedDetails.directors = [...new Set(combinedDetails.directors)];
                     combinedDetails.screenwriters = [...new Set(combinedDetails.screenwriters)];
                  }
+
+                // --- NEW: Extract Banner Image ---
+                if (apiResponseData.backdrop_path) {
+                    combinedDetails.bannerImageUrl = `https://image.tmdb.org/t/p/w1280${apiResponseData.backdrop_path}`; // Use a wide size
+                }
+
+                // --- NEW: Extract Trailer Video ---
+                if (apiResponseData.videos?.results?.length > 0) {
+                    // Find the first official trailer on YouTube
+                    const trailer = apiResponseData.videos.results.find(
+                        video => video.site === 'YouTube' && video.type === 'Trailer' && video.official
+                    ) || apiResponseData.videos.results.find( // Fallback to any YouTube trailer
+                        video => video.site === 'YouTube' && video.type === 'Trailer'
+                    ) || apiResponseData.videos.results.find( // Fallback to any YouTube video
+                        video => video.site === 'YouTube'
+                    );
+                    if (trailer) {
+                        combinedDetails.trailerVideoId = trailer.key; // YouTube video ID
+                    }
+                }
                 break;
 
             case 'book':
+                // Fetch book details (no changes needed here for banner/trailer)
                 const bookUrl = `${GOOGLE_BOOKS_BASE_URL}/${mediaId}?${GOOGLE_BOOKS_API_KEY ? 'key=' + GOOGLE_BOOKS_API_KEY : ''}`;
                 apiResponseData = await fetchData(bookUrl);
 
                 if (apiResponseData?.failed || !apiResponseData?.volumeInfo) {
-                    const status = apiResponseData?.status || 404;
-                     const message = apiResponseData?.error?.message || `Book details not found on Google Books (${status}).`;
-                    return res.status(status).json({ message });
+                   const status = apiResponseData?.status || 404;
+                   const message = apiResponseData?.error?.message || `Book details not found on Google Books (${status}).`;
+                   return res.status(status).json({ message });
                 }
-
                 const volInfo = apiResponseData.volumeInfo;
+                // --- Populate details (keep as before) ---
                 combinedDetails.title = volInfo.title;
                 combinedDetails.subtitle = volInfo.subtitle || (volInfo.authors ? volInfo.authors.join(', ') : null);
                 combinedDetails.description = volInfo.description;
-                // Prefer larger images if available
                 combinedDetails.imageUrl = volInfo.imageLinks?.thumbnail?.replace(/^http:/, 'https').replace(/zoom=\d/, 'zoom=1') || volInfo.imageLinks?.smallThumbnail?.replace(/^http:/, 'https') || null;
-                combinedDetails.releaseDate = volInfo.publishedDate; // Often just year or YYYY-MM
+                combinedDetails.releaseDate = volInfo.publishedDate;
                 combinedDetails.releaseYear = getYear(volInfo.publishedDate);
                 combinedDetails.apiRating = convertRatingTo10(volInfo.averageRating, 'google');
                 combinedDetails.genres = volInfo.categories || [];
@@ -4901,10 +5070,11 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 combinedDetails.publisher = volInfo.publisher || null;
                 combinedDetails.pageCount = volInfo.pageCount || null;
                 combinedDetails.googleBooksLink = volInfo.infoLink || null;
+                // Banner and Trailer remain null for books
                 break;
 
             case 'video game':
-                 // Fetch more fields for details
+                 // MODIFIED: Add screenshots.url and videos.video_id to the query
                 const gameQuery = `
                     fields
                         name, summary, storyline, url,
@@ -4921,36 +5091,43 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                     return res.status(status).json({ message: `Game details not found on IGDB (${status}).` });
                 }
 
+                // --- Basic Details (keep as before) ---
                 combinedDetails.title = apiResponseData.name;
-                combinedDetails.description = apiResponseData.summary || apiResponseData.storyline; // Use storyline if summary is missing
-                combinedDetails.imageUrl = apiResponseData.cover?.url
-                    ? apiResponseData.cover.url.replace('t_thumb', 't_cover_big').replace(/^\/\//, 'https://')
-                    : null;
-                combinedDetails.releaseDate = apiResponseData.first_release_date
-                    ? new Date(apiResponseData.first_release_date * 1000).toISOString().split('T')[0]
-                    : null;
+                combinedDetails.description = apiResponseData.summary || apiResponseData.storyline;
+                combinedDetails.imageUrl = apiResponseData.cover?.url ? apiResponseData.cover.url.replace('t_thumb', 't_cover_big').replace(/^\/\//, 'https://') : null;
+                combinedDetails.releaseDate = apiResponseData.first_release_date ? new Date(apiResponseData.first_release_date * 1000).toISOString().split('T')[0] : null;
                 combinedDetails.releaseYear = getYear(combinedDetails.releaseDate);
                 combinedDetails.apiRating = convertRatingTo10(apiResponseData.total_rating, 'igdb');
                 combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
-                combinedDetails.platforms = apiResponseData.platforms?.map(p => p.name) || []; // Get full platform names
+                combinedDetails.platforms = apiResponseData.platforms?.map(p => p.name) || [];
                 combinedDetails.igdbLink = apiResponseData.url || null;
-
-                // Extract developers and publishers from involved_companies
+                // --- Involved Companies (keep as before) ---
                 if (apiResponseData.involved_companies) {
-                    apiResponseData.involved_companies.forEach(ic => {
-                        if (ic.company?.name) {
-                            if (ic.developer) combinedDetails.developers.push(ic.company.name);
-                            if (ic.publisher) { // Assuming single publisher for simplicity, often primary
-                                combinedDetails.publisher = combinedDetails.publisher || ic.company.name;
-                            }
-                        }
-                    });
-                    combinedDetails.developers = [...new Set(combinedDetails.developers)];
-                    // Cast could potentially be derived from involved_companies if actor roles were tagged, but IGDB doesn't focus on this. Keep empty.
+                   apiResponseData.involved_companies.forEach(ic => {
+                       if (ic.company?.name) {
+                           if (ic.developer) combinedDetails.developers.push(ic.company.name);
+                           if (ic.publisher) combinedDetails.publisher = combinedDetails.publisher || ic.company.name;
+                       }
+                   });
+                   combinedDetails.developers = [...new Set(combinedDetails.developers)];
                 }
-                // Add screenshots and videos if needed (keep limited for payload size)
-                // combinedDetails.screenshots = apiResponseData.screenshots?.slice(0, 5).map(s => s.url?.replace('t_thumb', 't_screenshot_med').replace(/^\/\//, 'https://')) || [];
-                // combinedDetails.videos = apiResponseData.videos?.slice(0, 3).map(v => ({ youtubeId: v.video_id, youtubeLink: `https://www.youtube.com/watch?v=${v.video_id}` })) || [];
+
+                // --- NEW: Extract Banner Image (from screenshots) ---
+                if (apiResponseData.screenshots?.length > 0) {
+                    // Use the first screenshot as a banner
+                    let bannerUrl = apiResponseData.screenshots[0].url;
+                    if (bannerUrl) {
+                        // Replace size with a larger one (e.g., 1080p or screenshot_huge)
+                        bannerUrl = bannerUrl.replace('t_thumb', 't_1080p').replace(/^\/\//, 'https://');
+                        combinedDetails.bannerImageUrl = bannerUrl;
+                    }
+                }
+
+                // --- NEW: Extract Trailer Video ---
+                if (apiResponseData.videos?.length > 0) {
+                    // Use the first video ID found
+                    combinedDetails.trailerVideoId = apiResponseData.videos[0].video_id;
+                }
                 break;
 
             default:
@@ -4962,6 +5139,150 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
     } catch (error) {
         console.error(`Error processing details for ${mediaType} ${mediaId}:`, error);
         res.status(500).json({ message: error.message || 'Server error while fetching detailed media information.' });
+    }
+});
+
+module.exports = router;
+```
+
+### homepageDataRoutes.js
+
+```js
+// routes/api/homepageDataRoutes.js (NEW FILE)
+const express = require('express');
+const axios = require('axios');
+require('dotenv').config();
+const { getIgdbHeaders } = require('./igdbAuthHelper'); // IGDB helper
+
+const router = express.Router();
+
+// --- Environment Variable Checks & API URLs ---
+const TMDB_API_KEY = process.env.TMDB_API_KEY;
+const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
+const IGDB_CLIENT_ID = process.env.IGDB_CLIENT_ID; // Needed for headers
+const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+const GOOGLE_BOOKS_BASE_URL = 'https://www.googleapis.com/books/v1/volumes';
+const IGDB_BASE_URL = 'https://api.igdb.com/v4';
+
+// Helper to safely extract year
+const getYear = (dateString) => {
+    if (!dateString) return null;
+    try { return new Date(dateString).getFullYear(); }
+    catch (e) { const y = dateString.match(/\d{4}/); return y ? parseInt(y[0], 10) : null; }
+};
+
+// Map data to consistent mediaCard format
+const mapToCard = (item, type) => {
+    switch (type) {
+        case 'movie':
+            return {
+                mediaId: item.id.toString(), mediaType: 'movie', title: item.title,
+                imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+                releaseYear: getYear(item.release_date), apiSource: 'tmdb'
+            };
+        case 'series':
+            return {
+                mediaId: item.id.toString(), mediaType: 'series', title: item.name,
+                imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+                releaseYear: getYear(item.first_air_date), apiSource: 'tmdb'
+            };
+        case 'book': // Google Books - using 'newest' as proxy for popular/hot
+             return {
+                mediaId: item.id, mediaType: 'book', title: item.volumeInfo?.title || 'N/A',
+                authors: item.volumeInfo?.authors || [],
+                imageUrl: item.volumeInfo?.imageLinks?.thumbnail?.replace(/^http:/, 'https:') || item.volumeInfo?.imageLinks?.smallThumbnail?.replace(/^http:/, 'https:') || null,
+                releaseYear: getYear(item.volumeInfo?.publishedDate), apiSource: 'google_books'
+            };
+        case 'video game': // IGDB - using popularity sort
+            return {
+                mediaId: item.id.toString(), mediaType: 'video game', title: item.name || 'N/A',
+                imageUrl: item.cover?.url ? item.cover.url.replace(/^\/\//, 'https://').replace('/t_thumb/', '/t_cover_big/') : null,
+                releaseYear: item.first_release_date ? new Date(item.first_release_date * 1000).getFullYear() : null,
+                apiSource: 'igdb'
+            };
+        default: return {};
+    }
+};
+
+// GET /api/homepage-data?type=<mediaType>
+router.get('/', async (req, res) => {
+    const { type } = req.query;
+    const mediaType = type?.toLowerCase();
+    const limit = 12; // Number of items per carousel
+
+    if (!mediaType) {
+        return res.status(400).json({ message: 'Media type parameter is required.' });
+    }
+
+    let results = [];
+    let apiUrl = '';
+    let config = {};
+    let responseDataPath = 'results'; // Default path in TMDB response
+    let mapType = mediaType; // Type to use for mapping
+
+    try {
+        switch (mediaType) {
+            case 'movie':
+                if (!TMDB_API_KEY) throw new Error('TMDB API Key missing.');
+                apiUrl = `${TMDB_BASE_URL}/movie/popular?api_key=${TMDB_API_KEY}&language=en-US&page=1`;
+                break;
+            case 'series':
+                if (!TMDB_API_KEY) throw new Error('TMDB API Key missing.');
+                apiUrl = `${TMDB_BASE_URL}/tv/popular?api_key=${TMDB_API_KEY}&language=en-US&page=1`;
+                 break;
+            case 'book':
+                // Using 'newest' as a proxy for 'hot'/'recommendations' for books
+                // Alternatively use a generic query like 'subject:fiction' or 'subject:popular'
+                apiUrl = `${GOOGLE_BOOKS_BASE_URL}?q=subject:fiction&orderBy=newest&maxResults=${limit}${GOOGLE_BOOKS_API_KEY ? '&key=' + GOOGLE_BOOKS_API_KEY : ''}&langRestrict=en&printType=books`;
+                responseDataPath = 'items'; // Google Books path
+                 break;
+            case 'video game':
+            case 'videogame': // Allow alias
+                 mapType = 'video game'; // Use consistent type for mapping
+                 const igdbHeaders = await getIgdbHeaders();
+                 config = { headers: { ...igdbHeaders, 'Content-Type': 'text/plain' } };
+                 apiUrl = `${IGDB_BASE_URL}/games`;
+                 // Query popular games with some rating count to avoid obscure ones
+                 const igdbBody = `
+                     fields name, cover.url, first_release_date;
+                     sort popularity desc;
+                     where total_rating_count > 20 & category = 0;
+                     limit ${limit};`; // Category 0 = Main Game
+                config.data = igdbBody; // Data for POST request
+                config.method = 'POST';
+                 responseDataPath = null; // IGDB response is directly the array
+                break;
+            default:
+                return res.status(400).json({ message: 'Invalid media type specified.' });
+        }
+
+        // Make the API request
+        let response;
+        if (config.method === 'POST') {
+            response = await axios(apiUrl, config);
+        } else {
+            response = await axios.get(apiUrl, config);
+        }
+
+        // Extract and map results
+        const rawResults = responseDataPath ? response.data[responseDataPath] : response.data;
+        if (Array.isArray(rawResults)) {
+            results = rawResults.slice(0, limit).map(item => mapToCard(item, mapType));
+        }
+
+        // Return same data for both 'hottest' and 'recommendations' for now
+        res.status(200).json({
+             hottest: results,
+             recommendations: results
+         });
+
+    } catch (error) {
+         console.error(`Error fetching homepage data for ${mediaType}:`, error.response?.data || error.message);
+         if (error.message.includes('API Key missing') || error.message.includes('IGDB service') || error.message.includes('authenticate with IGDB')) {
+            return res.status(503).json({ message: `Service unavailable for ${mediaType}: ${error.message}` });
+         }
+         const status = error.response?.status || 500;
+         res.status(status).json({ message: `Failed to fetch data for ${mediaType}.`, details: error.message });
     }
 });
 
@@ -5077,16 +5398,18 @@ const VALID_MEDIA_TYPES = ['movie', 'series', 'book', 'video game'];
 const VALID_STATUSES = ['planned', 'watching', 'completed', 'paused', 'dropped'];
 const COMPLETED_STATUS = 'completed'; // Single status for completion
 
-// Helper function to validate and parse rating (1-10 scale)
+// Helper function to validate and parse rating (MODIFIED for 0-20 REAL)
 function parseAndValidateRating(ratingInput) {
     if (ratingInput === undefined || ratingInput === null || ratingInput === '') {
-        return null; // Allow clearing rating
+        return null;
     }
-    const rating = parseInt(ratingInput, 10);
-    if (isNaN(rating) || rating < 1 || rating > 10) {
-        throw new Error('Invalid userRating. Must be an integer between 1 and 10, or null/empty.');
+    // Use parseFloat for decimals
+    const rating = parseFloat(ratingInput);
+    // Check range 0-20 inclusive
+    if (isNaN(rating) || rating < 0 || rating > 20) {
+        throw new Error('Invalid userRating. Must be a number between 0 and 20, or null/empty.');
     }
-    return rating;
+    return parseFloat(rating.toFixed(2));
 }
 
 // Helper function to validate status
@@ -6017,7 +6340,6 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ message: 'Invalid or missing media type parameter.' });
     }
 
-    console.log(`API Search: Type=${mediaType}, Query="${query}"`);
     const encodedQuery = encodeURIComponent(query.trim());
     let results = [];
 
@@ -6169,46 +6491,62 @@ module.exports = router;
 <div class="container error-message">{{homeError}}</div>
 {{/if}}
 
-{{!-- Horizontal Navigation Bar --}}
-<nav class="horizontal-nav container">
-    {{!-- Use buttons or links to filter content (JS needed) or navigate --}}
-    <button class="nav-item active" data-filter="all">All</button>
-    <button class="nav-item" data-filter="movie">Movies</button>
-    <button class="nav-item" data-filter="series">Series</button>
-    <button class="nav-item" data-filter="book">Books</button>
-    <button class="nav-item" data-filter="video game">Video Games</button>
+{{!-- Tab Navigation Bar --}}
+<nav class="horizontal-nav container homepage-tabs">
+    {{!-- Use data-type attribute for JS targeting --}}
+    <button class="nav-item {{#eq initialTab 'movie'}}active{{/eq}}" data-type="movie">Movies</button>
+    <button class="nav-item {{#eq initialTab 'series'}}active{{/eq}}" data-type="series">Series</button>
+    <button class="nav-item {{#eq initialTab 'book'}}active{{/eq}}" data-type="book">Books</button>
+    <button class="nav-item {{#eq initialTab 'video game'}}active{{/eq}}" data-type="video game">Video Games</button>
 </nav>
 
-{{!-- Hottest Section (Placeholder) --}}
-<section class="media-carousel-section container">
-    <h2 class="section-title">🔥 Hottest Right Now</h2>
-    <div class="swiper media-swiper">
-        <div class="swiper-wrapper">
-            {{#each hottest}}
-             <div class="swiper-slide">
-                {{> mediaCard items=(list this) }} {{!-- Pass single item as list --}}
-             </div>
-            {{/each}}
-        </div>
-        <div class="swiper-button-prev"></div>
-        <div class="swiper-button-next"></div>
-        {{!-- <div class="swiper-pagination"></div> --}}
+{{!-- Tab Content Area --}}
+<div class="tab-content-area container">
+    {{!-- Panel for Movies (Rendered Server-Side) --}}
+    <div class="tab-content {{#unless (eq initialTab 'movie')}}hidden{{/unless}}" data-type="movie">
+        {{#if hottest.length}}
+            <section class="media-carousel-section">
+                <h2 class="section-title">🔥 Hottest Movies</h2>
+                <div class="swiper media-swiper"> <div class="swiper-wrapper"> {{#each hottest}} <div class="swiper-slide">{{> mediaCard items=(list this)}}</div>{{/each}} </div> <div class="swiper-button-prev"></div> <div class="swiper-button-next"></div> </div>
+            </section>
+            <section class="media-carousel-section">
+                <h2 class="section-title">✨ Recommended Movies</h2>
+                <div class="swiper media-swiper"> <div class="swiper-wrapper"> {{#each recommendations}} <div class="swiper-slide">{{> mediaCard items=(list this)}}</div>{{/each}} </div> <div class="swiper-button-prev"></div> <div class="swiper-button-next"></div> </div>
+            </section>
+        {{else}}
+             {{#unless homeError}} {{!-- Show placeholder only if no error occurred for this tab --}}
+                 <p class="placeholder-text">Could not load movie data.</p>
+             {{/unless}}
+        {{/if}}
     </div>
-</section>
 
-{{!-- In Your Watchlist Section --}}
-{{#if user}} {{!-- Only show if logged in --}}
+    {{!-- Panel for Series (Initially Hidden, Loaded by JS) --}}
+    <div class="tab-content hidden" data-type="series">
+        {{!-- Loading indicator or content added by JS --}}
+        <div class="loading-placeholder">Loading Series...</div>
+    </div>
+
+    {{!-- Panel for Books (Initially Hidden, Loaded by JS) --}}
+    <div class="tab-content hidden" data-type="book">
+        <div class="loading-placeholder">Loading Books...</div>
+    </div>
+
+    {{!-- Panel for Video Games (Initially Hidden, Loaded by JS) --}}
+    <div class="tab-content hidden" data-type="video game">
+        <div class="loading-placeholder">Loading Video Games...</div>
+    </div>
+</div>
+
+{{!-- Watchlist Section (Remains below tabs) --}}
+{{#if user}}
 <section class="media-carousel-section container">
     <h2 class="section-title">📑 In Your Watchlist (Planned)</h2>
      {{#if watchlist.length}}
     <div class="swiper media-swiper">
         <div class="swiper-wrapper">
-             {{!-- Render watchlist items using mediaCard partial --}}
-             {{!-- The 'watchlist' variable comes from viewRoutes.js --}}
             {{#each watchlist}}
             <div class="swiper-slide">
-                 {{!-- Need to adapt watchlist data if structure differs from mediaCard expectation --}}
-                {{> mediaCard items=(list this) userStatus='planned' }} {{!-- Override status visually for this section --}}
+                 {{> mediaCard items=(list this) userStatus='planned' }}
              </div>
             {{/each}}
         </div>
@@ -6220,27 +6558,6 @@ module.exports = router;
     {{/if}}
 </section>
 {{/if}}
-
-
-{{!-- Recommendation Section (Placeholder) --}}
-<section class="media-carousel-section container">
-    <h2 class="section-title">✨ Recommendations For You</h2>
-     <div class="swiper media-swiper">
-        <div class="swiper-wrapper">
-            {{#each recommendations}}
-            <div class="swiper-slide">
-                 {{> mediaCard items=(list this) }}
-             </div>
-            {{/each}}
-        </div>
-        <div class="swiper-button-prev"></div>
-        <div class="swiper-button-next"></div>
-    </div>
-</section>
-
-{{!-- Helper function to wrap single item in list for partial --}}
-{{#*inline "list"}}[{{> (lookup . '0')}}] {{/inline}}
-
 ```
 
 ### listDetail.hbs
@@ -6366,15 +6683,17 @@ module.exports = router;
 ```hbs
 {{! views/mediaDetail.hbs }}
 <div class="media-detail-page">
-    {{!-- Background Image / Backdrop --}}
-    {{#if item.backdropPath}} {{!-- Assuming backdropPath is provided by details API --}}
-        <div class="backdrop-image" style="background-image: url('{{item.backdropPath}}');"></div>
+    {{!-- Background Image / Banner --}}
+    {{#if item.bannerImageUrl}}
+        {{!-- Use the fetched banner image --}}
+        <div class="backdrop-image" style="background-image: url('{{item.bannerImageUrl}}');"></div>
     {{else}}
+         {{!-- Fallback to placeholder if no banner URL --}}
          <div class="backdrop-image placeholder"></div>
     {{/if}}
 
     <div class="detail-content container">
-        {{!-- Main Info Section --}}
+        {{!-- Main Info Section (Keep As Is) --}}
         <section class="detail-main-info">
             <div class="detail-poster">
                 <img src="{{defaultIfEmpty item.imageUrl '/images/placeholder.png'}}" alt="{{item.title}} Poster" onerror="this.onerror=null; this.src='/images/placeholder.png';">
@@ -6385,11 +6704,10 @@ module.exports = router;
                 <div class="detail-meta">
                     <span class="tag tag-{{classify item.mediaType}}">{{capitalize item.mediaType}}</span>
                     {{#if item.genres.length}}<span>{{join item.genres ", "}}</span>{{/if}}
-                     {{#if item.runtime}}<span>{{item.runtime}}</span>{{/if}} {{!-- Add runtime if available --}}
+                     {{#if item.runtime}}<span>{{item.runtime}}</span>{{/if}}
                      {{#if item.releaseDate}}<span>Released: {{formatDate item.releaseDate}}</span>{{/if}}
                 </div>
                 <div class="detail-actions">
-                     {{!-- User Interaction Partial --}}
                      {{> userInteractionControls item=item user=user}}
                 </div>
                 <h3>Overview</h3>
@@ -6397,35 +6715,27 @@ module.exports = router;
             </div>
         </section>
 
-         {{!-- Metadata Section --}}
+         {{!-- Metadata Section (Keep As Is) --}}
         <section class="detail-metadata card">
-            <h3>Details</h3>
-            <div class="metadata-grid">
-                {{#if item.directors.length}}<div class="meta-item"><span class="meta-label">Director(s):</span> <span class="meta-value">{{join item.directors ", "}}</span></div>{{/if}}
-                {{#if item.screenwriters.length}}<div class="meta-item"><span class="meta-label">Writer(s):</span> <span class="meta-value">{{join item.screenwriters ", "}}</span></div>{{/if}}
-                {{#if item.authors.length}}<div class="meta-item"><span class="meta-label">Author(s):</span> <span class="meta-value">{{join item.authors ", "}}</span></div>{{/if}}
-                 {{#if item.developers.length}}<div class="meta-item"><span class="meta-label">Developer(s):</span> <span class="meta-value">{{join item.developers ", "}}</span></div>{{/if}}
-                {{#if item.publisher}}<div class="meta-item"><span class="meta-label">Publisher:</span> <span class="meta-value">{{item.publisher}}</span></div>{{/if}}
-                {{#if item.platforms.length}}<div class="meta-item"><span class="meta-label">Platform(s):</span> <span class="meta-value">{{join item.platforms ", "}}</span></div>{{/if}}
-                 {{#if item.pageCount}}<div class="meta-item"><span class="meta-label">Pages:</span> <span class="meta-value">{{item.pageCount}}</span></div>{{/if}}
+            {{!-- ... existing metadata content ... --}}
+        </section>
 
-                 {{#if item.apiRating}}
-                 <div class="meta-item">
-                     <span class="meta-label">Community Rating:</span>
-                     <span class="meta-value rating-display">
-                        {{renderStars item.apiRating 10}} ({{item.apiRating}}/10)
-                     </span>
-                 </div>
-                 {{/if}}
-                 {{!-- External Links --}}
-                  <div class="meta-item external-links">
-                     {{#if item.imdbId}} <a href="https://www.imdb.com/title/{{item.imdbId}}/" target="_blank" rel="noopener">IMDb</a> {{/if}}
-                     {{#if item.tmdbLink}} <a href="{{item.tmdbLink}}" target="_blank" rel="noopener">TMDB</a> {{/if}}
-                     {{#if item.googleBooksLink}} <a href="{{item.googleBooksLink}}" target="_blank" rel="noopener">Google Books</a> {{/if}}
-                     {{#if item.igdbLink}} <a href="{{item.igdbLink}}" target="_blank" rel="noopener">IGDB</a> {{/if}}
-                 </div>
+        {{!-- Trailer Section (NEW) --}}
+        {{#if item.trailerVideoId}}
+        <section class="detail-trailer-section card">
+            <h3>Trailer</h3>
+            <div class="video-responsive">
+                <iframe
+                    width="560" height="315"
+                    src="https://www.youtube.com/embed/{{item.trailerVideoId}}"
+                    title="YouTube video player for {{item.title}}"
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen>
+                </iframe>
             </div>
         </section>
+        {{/if}}
 
         {{!-- Cast/Characters Section --}}
          {{#if item.cast.length}}
@@ -6576,9 +6886,10 @@ module.exports = router;
 {{! views/userProfile.hbs }}
 <div class="profile-page container">
     <section class="profile-header card">
-        <div class="profile-banner"> {{!-- Placeholder banner --}} </div>
+        {{!-- Profile Header content remains the same --}}
+        <div class="profile-banner"></div>
         <div class="profile-info">
-            <img src="{{defaultIfEmpty profile.profileImageUrl '/images/placeholder_avatar.png'}}" alt="{{profile.username}}'s Profile Picture" class="profile-picture" onerror="this.onerror=null; this.src='/images/placeholder_avatar.png';">
+             <img src="{{defaultIfEmpty profile.profileImageUrl '/images/placeholder_avatar.png'}}" alt="{{profile.username}}'s Profile Picture" class="profile-picture" onerror="this.onerror=null; this.src='/images/placeholder_avatar.png';">
             <div class="profile-details">
                 <h2>{{profile.username}}</h2>
                 <p class="member-since">Member since {{formatDate profile.memberSince}}</p>
@@ -6598,40 +6909,30 @@ module.exports = router;
                     {{/if}}
                  </div>
             </div>
-            <div class="profile-actions">
-                {{#unless isOwnProfile}}
-                    {{!-- Social Feature: Add Friend Button (Skipped) --}}
-                    {{!-- <button class="btn btn-primary add-friend-btn">Add Friend</button> --}}
-                {{else}}
-                     {{!-- <button class="btn btn-secondary edit-profile-btn">Edit Profile</button> --}}
-                {{/unless}}
+             <div class="profile-actions">
+                {{!-- Actions remain the same --}}
             </div>
         </div>
         <div class="profile-stats">
-            <div class="stat-item">
-                <span class="stat-value">{{defaultIfEmpty profile.countMediaCompleted 0}}</span>
-                <span class="stat-label">Media Completed</span>
-            </div>
+             {{!-- Stats remain the same --}}
+             <div class="stat-item"> <span class="stat-value">{{defaultIfEmpty profile.countMediaCompleted 0}}</span> <span class="stat-label">Media Completed</span> </div>
              <div class="stat-item">
-                <span class="stat-value">{{defaultIfEmpty profile.averageScore "-"}}</span>
-                <span class="stat-label">Average Score</span>
-            </div>
-             <div class="stat-item">
-                <span class="stat-value">{{defaultIfEmpty profile.countMediaTotal 0}}</span>
-                <span class="stat-label">Items Tracked</span>
-            </div>
-            {{!-- Add more stats here if available --}}
+                 <span class="stat-value">{{defaultIfEmpty profile.averageScore "-"}}</span>
+                 <span class="stat-label">Average Score /20</span>
+             </div>
+             <div class="stat-item"> <span class="stat-value">{{defaultIfEmpty profile.countMediaTotal 0}}</span> <span class="stat-label">Items Tracked</span> </div>
         </div>
     </section>
 
-    {{!-- Last Seen Section --}}
+    {{!-- 1. Recently Completed Section --}}
     <section class="media-carousel-section container">
-        <h2 class="section-title">Recently Completed</h2>
-         {{#if lastSeen.length}}
+        <h2 class="section-title">✅ Recently Completed</h2>
+         {{#if recentlyCompletedItems.length}}
          <div class="swiper media-swiper">
             <div class="swiper-wrapper">
-                {{#each lastSeen}}
+                {{#each recentlyCompletedItems}}
                 <div class="swiper-slide">
+                    {{!-- The item already has userStatus='completed' --}}
                     {{> mediaCard items=(list this) }}
                  </div>
                 {{/each}}
@@ -6644,14 +6945,36 @@ module.exports = router;
         {{/if}}
     </section>
 
-    {{!-- Favorites Section --}}
+    {{!-- 2. Currently Watching/Reading/Playing Section --}}
     <section class="media-carousel-section container">
-        <h2 class="section-title">⭐ Favorites</h2>
-         {{#if favorites.length}}
+        <h2 class="section-title">▶️ Currently Engaging</h2>
+         {{#if watchingItems.length}}
          <div class="swiper media-swiper">
             <div class="swiper-wrapper">
-                {{#each favorites}}
+                {{#each watchingItems}}
                 <div class="swiper-slide">
+                     {{!-- The item already has userStatus='watching' --}}
+                     {{> mediaCard items=(list this) }}
+                </div>
+                {{/each}}
+            </div>
+            <div class="swiper-button-prev"></div>
+            <div class="swiper-button-next"></div>
+        </div>
+        {{else}}
+        <p class="placeholder-text">Not currently watching, reading, or playing anything.</p>
+        {{/if}}
+    </section>
+
+    {{!-- 3. Watchlist (Planned) Section --}}
+    <section class="media-carousel-section container">
+        <h2 class="section-title">📑 Watchlist (Planned)</h2>
+         {{#if plannedItems.length}}
+         <div class="swiper media-swiper">
+            <div class="swiper-wrapper">
+                {{#each plannedItems}}
+                <div class="swiper-slide">
+                    {{!-- The item already has userStatus='planned' --}}
                     {{> mediaCard items=(list this) }}
                 </div>
                 {{/each}}
@@ -6660,19 +6983,18 @@ module.exports = router;
             <div class="swiper-button-next"></div>
         </div>
         {{else}}
-        <p class="placeholder-text">No favorite items marked yet.</p>
+        <p class="placeholder-text">Your watchlist is empty. Add some items!</p>
         {{/if}}
     </section>
 
-    {{!-- Public Lists Section --}}
+    {{!-- Public Lists Section (Remains the same) --}}
     <section class="media-carousel-section container">
-        <h2 class="section-title">Public Lists</h2>
+        <h2 class="section-title">📚 Public Lists</h2>
          {{#if publicLists.length}}
-          <div class="swiper list-swiper"> {{!-- Potentially use a different card for lists --}}
+          <div class="swiper list-swiper">
             <div class="swiper-wrapper">
                  {{#each publicLists}}
                  <div class="swiper-slide">
-                     {{!-- Render List Summary Card (Need a partial 'listCard' or adapt 'listSummaryRow') --}}
                       <div class="list-card">
                           <a href="/lists/{{this.id}}">
                              <img src="{{defaultIfEmpty this.coverImageUrl '/images/placeholder_list.png'}}" alt="{{this.title}} Cover" class="list-card-image" onerror="this.onerror=null; this.src='/images/placeholder_list.png';">
@@ -6688,14 +7010,12 @@ module.exports = router;
              <div class="swiper-button-prev"></div>
              <div class="swiper-button-next"></div>
         </div>
-        <p><a href="/lists?userId={{profile.id}}">View all lists...</a></p> {{!-- Link to full list overview --}}
         {{else}}
         <p class="placeholder-text">{{#if isOwnProfile}}You haven't created any public lists.{{else}}This user has no public lists.{{/if}}</p>
         {{/if}}
     </section>
 
 </div>
-
 ```
 
 ### auth.hbs
@@ -6870,8 +7190,8 @@ module.exports = router;
         </select>
     </div>
     <div class="form-group">
-        <label for="userRating">Rating (1-10):</label>
-        <input type="number" id="userRating" name="userRating" min="1" max="10" placeholder="None" value="{{item.userRating}}">
+        <label for="userRating">Rating (0-20):</label>
+        <input type="number" id="userRating" name="userRating" min="0" max="20" step="0.1" placeholder="None" value="{{item.userRating}}">
     </div>
      <div class="form-group">
         <label for="isFavorite">Favorite:</label>
@@ -6938,7 +7258,7 @@ module.exports = router;
     </div>
     <div class="col-status">
          <span class="tag tag-status-{{classify item.userStatus}}">{{capitalize item.userStatus}}</span>
-         {{#if item.userRating}}({{item.userRating}}/10){{/if}}
+         {{#if item.userRating}}({{item.userRating}}/20){{/if}}
     </div>
     <div class="col-comment">{{defaultIfEmpty item.userComment "---"}}</div>
     <div class="col-added">{{formatDate item.dateAdded}}</div>
@@ -7109,9 +7429,10 @@ module.exports = router;
             {{!-- Rating Input --}}
              <div class="interaction-group rating-group">
                  <label for="detailRatingInput">My Rating:</label>
-                 <input type="number" id="detailRatingInput" name="userRating" min="1" max="10" placeholder="-" value="{{item.userRating}}">
-                 <span>/ 10</span>
+                 <input type="number" id="detailRatingInput" name="userRating" min="0" max="20" step="0.1" placeholder="-" value="{{item.userRating}}">
+                 <span>/ 20</span>
             </div>
+
             {{!-- Favorite Checkbox --}}
              <div class="interaction-group favorite-group">
                  <label for="detailFavoriteToggle">Favorite:</label>
