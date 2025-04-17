@@ -6,7 +6,7 @@
         <div class="profile-info">
              <img src="{{defaultIfEmpty profile.profileImageUrl '/images/cat.svg'}}" alt="{{profile.username}}'s Profile Picture" class="profile-picture" onerror="this.onerror=null; this.src='/images/cat.svg';">
             <div class="profile-details">
-                <h2>{{profile.username}}</h2>
+                <h1>{{profile.username}}</h1>
                 <p class="member-since">Member since {{formatDate profile.memberSince}}</p>
                 <div class="profile-privacy">
                      {{#if isOwnProfile}}
