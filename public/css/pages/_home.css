@@ -16,18 +16,12 @@
 
 /* Add to public/css/pages/_home.css or similar */
 .homepage-tabs {
-    /* Styles already likely exist in _navigation.css for .horizontal-nav */
-    /* Ensure active state is visually distinct */
     margin-bottom: var(--space-lg); /* Space between tabs and content */
 }
 .homepage-tabs .nav-item.active {
     /* Styles likely exist, ensure they are applied */
     color: var(--color-primary);
     border-bottom-color: var(--color-primary);
-}
-
-.tab-content-area {
-    /* Container for tab panels */
 }
 
 .tab-content {

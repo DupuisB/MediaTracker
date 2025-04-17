@@ -11,11 +11,9 @@
     border-width: 0;
   }
   
-  /* Hide element visually and from screen readers */
-  .hidden {
-      display: none !important;
-  }
-  
-  /* Add more utility classes as needed, e.g., for text alignment, margins */
-  .text-center { text-align: center; }
-  /* etc. */
+/* Hide element visually and from screen readers */
+.hidden {
+    display: none !important;
+}
+
+.text-center { text-align: center; }

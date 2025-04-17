@@ -167,7 +167,7 @@
     }
      .col-comment { font-style: normal; }
      .col-added::before { content: "Added: "; font-weight: var(--font-weight-medium); color: var(--color-text-light); }
-     .col-status::before { content: ""; } /* Remove pseudo content */
+     .col-status::before { content: ""; }
 
      .edit-comment-form {
          grid-column: 1 / 2;

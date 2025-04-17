@@ -4,7 +4,7 @@ const path = require('path');
 const util = require('util'); // Import the util module
 
 // Define the path to the database file
-const dbPath = path.resolve(__dirname, 'watchlist_v2.db'); // Existing DB file name
+const dbPath = path.resolve(__dirname, 'watchlist.db'); // Existing DB file name
 
 // Create or open the database
 const db = new sqlite3.Database(dbPath, (err) => {
@@ -17,7 +17,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     }
 });
 
-// --- Promise Wrappers (Keep existing wrappers: getAsync, allAsync, runAsync) ---
+// --- Promise Wrappers ---
 db.getAsync = util.promisify(db.get).bind(db);
 db.allAsync = util.promisify(db.all).bind(db);
 db.runAsync = function(sql, params = []) {

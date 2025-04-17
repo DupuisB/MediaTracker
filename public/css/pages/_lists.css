@@ -10,9 +10,6 @@
     margin-bottom: var(--space-xl);
 }
 
-.lists-container {
-    /* Container for list summary rows */
-}
 #listFormArea { margin-top: var(--space-lg); }
 #listFormArea.hidden { display: none; }
 

@@ -53,7 +53,7 @@ app.engine('hbs', engine({
                 case 'completed': return 'outline-green';
                 case 'watching': case 'reading': case 'playing': return 'outline-blue'; // Map 'watching' etc. to blue
                 case 'planned': return 'outline-red';
-                case 'paused': return 'outline-yellow'; // Optional: Add color for paused/dropped
+                case 'paused': return 'outline-yellow';
                 case 'dropped': return 'outline-grey';
                 default: return '';
             }
@@ -80,7 +80,6 @@ app.engine('hbs', engine({
                     return true;
                 }
             }
-            // If loop finishes, none were truthy
             return false;
         }
     }
@@ -154,7 +153,7 @@ app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
 
-// Graceful shutdown (Keep existing handler)
+// Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nSIGINT received: Closing server and database connection...');
   // Use the promisified db methods for closing if available, otherwise use callback

@@ -14,11 +14,6 @@
     align-items: end; /* Align items to bottom */
 }
 
-.interaction-group {
-    /* display: flex; */
-    /* flex-direction: column; */
-}
-
 .interaction-group label {
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-medium);

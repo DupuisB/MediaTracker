@@ -51,9 +51,6 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ message: 'Invalid userId provided.' });
     }
 
-    // Basic permission check: Allow only if requesting own library or target profile is public (implement later if needed)
-    // For now, assume access is allowed if authenticated for simplicity of non-social features
-
     // Filtering/Sorting Params
     const { mediaType, userStatus, isFavorite, sortBy, limit } = req.query;
     const favoriteFilter = parseBoolean(isFavorite); // Convert 'true'/'false'/'1'/'0' to boolean
@@ -76,7 +73,7 @@ router.get('/', async (req, res) => {
             params.push(favoriteFilter ? 1 : 0);
         }
 
-        // Apply Sorting (Add more options as needed)
+        // Apply Sorting
         const validSorts = {
              addedAt: 'addedAt DESC',
              updatedAt: 'updatedAt DESC',
@@ -155,7 +152,6 @@ router.post('/', async (req, res) => {
         const year = releaseYear ? parseInt(releaseYear, 10) : null;
         if (releaseYear && isNaN(year)){
              console.warn(`Invalid releaseYear format received: ${releaseYear}`);
-             // Decide whether to reject or just store null
         }
 
 
@@ -264,7 +260,6 @@ router.put('/:id', async (req, res) => {
             // Fetch and return current item state as confirmation
              const currentItem = await db.getAsync(`SELECT * FROM library_items WHERE id = ?`, [itemId]);
             return res.status(200).json(currentItem);
-            // return res.status(404).json({ message: 'Item not found or no changes needed.' });
         }
 
         // Fetch and return the updated item
@@ -287,7 +282,6 @@ router.delete('/:id', async (req, res) => {
     const itemId = req.params.id;
 
     try {
-        // Optional: Check if item is in any lists before deleting? Or rely on CASCADE delete?
         // For now, rely on CASCADE in user_list_items table.
 
         const result = await db.runAsync(`DELETE FROM library_items WHERE id = ? AND userId = ?`, [itemId, userId]);
@@ -316,7 +310,6 @@ router.get('/stats/:userId', async (req, res) => {
     // Permission check (basic - allow own stats, maybe public later)
     if (requestingUserId !== targetUserId) {
         // Could check target user's profile privacy here if needed
-        // return res.status(403).json({ message: 'Cannot access stats for another user.' });
     }
 
 
@@ -348,7 +341,7 @@ router.get('/stats/:userId', async (req, res) => {
             averageScore: averageScore, // Average rating given (1-10)
             countCompleted: countCompleted, // "Nb vues"
             countTotal: countTotal, // Total items tracked
-            // Add more stats as needed (e.g., counts per type, per status)
+            // Add more stats as needed (for instance counts per type, per status)
         });
 
     } catch (error) {

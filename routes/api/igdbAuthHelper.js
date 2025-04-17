@@ -1,5 +1,4 @@
 // routes/api/igdbAuthHelper.js
-// Using 1-10 rating scale now, adjust conversion helper
 const axios = require('axios');
 require('dotenv').config();
 
@@ -10,7 +9,6 @@ const TWITCH_AUTH_URL = 'https://id.twitch.tv/oauth2/token';
 
 let igdbTokenCache = { accessToken: null, expiresAt: 0 };
 
-// Keep getIgdbAccessToken and getIgdbHeaders functions as they are.
 async function getIgdbAccessToken() {
     const now = Date.now();
     const bufferTime = 60 * 1000; // 60 seconds buffer before expiry
@@ -67,12 +65,11 @@ function convertRatingTo10(apiRating, source) {
 
     switch (source) {
         case 'tmdb': // Scale 0-10
-            // Keep as is, maybe round to 1 decimal?
             return Math.round(rating * 10) / 10;
         case 'google': // Scale 0-5 (averageRating)
-            return Math.round(rating * 2 * 10) / 10; // Multiply by 2
+            return Math.round(rating * 2 * 10) / 10;
         case 'igdb': // Scale 0-100 (total_rating)
-            return Math.round(rating / 10 * 10) / 10; // Divide by 10
+            return Math.round(rating / 10 * 10) / 10;
         default:
             return null;
     }
@@ -82,5 +79,5 @@ function convertRatingTo10(apiRating, source) {
 module.exports = {
     getIgdbAccessToken,
     getIgdbHeaders,
-    convertRatingTo10 // Export updated helper
+    convertRatingTo10
 };

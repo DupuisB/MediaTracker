@@ -6,29 +6,23 @@
     position: relative;
 }
 
-.swiper-wrapper {
-    /* display: flex; /* Swiper handles this */
-    /* align-items: stretch; /* Make slides equal height if needed */
-}
-
 .swiper-slide {
     width: auto; /* Allow slides to size based on content or CSS */
     flex-shrink: 0;
     height: auto; /* Allow slides to determine their height */
-    /* Ensure slides are block or flex containers if needed */
-    display: flex; /* Make slide a flex container */
+    display: flex;
     justify-content: center; /* Center content if slide is wider */
 }
 
 /* Adjust slide width for specific carousels if needed */
 .media-swiper .swiper-slide {
-     width: 180px; /* Example width for media cards */
+     width: 180px;
 }
 .cast-swiper .swiper-slide {
-    width: 100px; /* Example width for cast members */
+    width: 100px;
 }
 .list-swiper .swiper-slide {
-     width: 250px; /* Example width for list cards */
+     width: 250px;
 }
 
 /* Navigation Buttons */
@@ -44,12 +38,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--color-primary); /* Use theme color */
+    color: var(--color-primary);
     background-color: rgba(255, 255, 255, 0.8);
     border-radius: 50%;
     box-shadow: var(--shadow-md);
     transition: opacity var(--transition-fast), background-color var(--transition-fast);
-    opacity: 0; /* Hidden by default */
+    opacity: 0;
 }
 .swiper:hover .swiper-button-prev,
 .swiper:hover .swiper-button-next {

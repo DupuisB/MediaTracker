@@ -3,8 +3,7 @@
     {{#if query}}
         <h1 class="search-title">Search Results for: <strong>"{{query}}"</strong></h1>
 
-        {{!-- Add Horizontal Navigation Bar --}}
-        <nav class="horizontal-nav container search-nav"> {{!-- Added 'search-nav' class --}}
+        <nav class="horizontal-nav container search-nav"> 
             <button class="nav-item active" data-filter="all">All</button> {{!-- Default to All --}}
             {{#each results}}
                 {{#if this.length}} {{!-- Only create tab if category has results --}}
@@ -22,10 +21,7 @@
                 {{#if this.length}}
                     {{!-- Wrap each category grid in a container with data-type attribute --}}
                     <section class="results-category" data-category="{{@key}}">
-                        {{!-- Title is now optional or handled differently --}}
-                        {{!-- <h2 class="category-title">{{capitalize @key}}</h2> --}}
                         <div class="results-grid">
-                             {{!-- Render media cards for this category --}}
                              {{> mediaCard items=this cardClass=(concat "result-" @key) }}
                         </div>
                     </section>

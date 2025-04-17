@@ -1,7 +1,6 @@
 // public/js/modules/listHandlers.js
 import { apiRequest } from './api.js';
 import { showStatusMessage, showSpinner, openModal, closeModal, setupDeleteConfirmation, formModal } from './ui.js';
-// No template needed here as forms are built with strings currently
 
 /**
  * Handles clicking the "Create New List" button.
@@ -273,7 +272,6 @@ function initListInteractions() {
 
     // Detail Page
     if (listDetailContainer) {
-        // Set listId on body/section for context if needed by handlers
         const pathParts = window.location.pathname.split('/').filter(p => p);
         if (pathParts[0] === 'lists' && pathParts[1]) {
             document.body.dataset.listId = pathParts[1];

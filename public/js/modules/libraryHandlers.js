@@ -3,9 +3,6 @@ import { apiRequest } from './api.js';
 import { showStatusMessage, showSpinner, openModal, closeModal, setupDeleteConfirmation, formModal } from './ui.js';
 import { getTemplate } from './templates.js';
 
-// Note: updateInteractionControls is defined here but also used by ui.js for delete confirmation.
-// Consider moving it to ui.js if that makes more sense, or keep it here as it's library-item specific.
-
 /**
  * Updates the interaction controls UI on the media detail page.
  * @param {object|null} libraryItemData - The library item data, or null if removed.
@@ -230,5 +227,5 @@ export {
     openLibraryItemFormModal,
     handleLibraryItemFormSubmit,
     initMediaDetailInteraction,
-    updateInteractionControls // Export if needed by ui.js
+    updateInteractionControls
 };

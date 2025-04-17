@@ -10,7 +10,7 @@
     {{/if}}
 
     <div class="detail-content container">
-        {{!-- Main Info Section (Keep As Is) --}}
+        {{!-- Main Info Section --}}
         <section class="detail-main-info">
             <div class="detail-poster">
                 <img src="{{defaultIfEmpty item.imageUrl '/images/placeholder.png'}}" alt="{{item.title}} Poster" onerror="this.onerror=null; this.src='/images/placeholder.png';">
@@ -32,12 +32,48 @@
             </div>
         </section>
 
-         {{!-- Metadata Section (Keep As Is) --}}
+         {{!-- Metadata Section --}}
         <section class="detail-metadata card">
-            {{!-- ... existing metadata content ... --}}
+            <h3>Details</h3>
+            <div class="metadata-grid">
+                {{#if item.directors.length}}<div class="meta-item"><span class="meta-label">Director(s):</span> <span class="meta-value">{{join item.directors ", "}}</span></div>{{/if}}
+                {{#if item.screenwriters.length}}<div class="meta-item"><span class="meta-label">Writer(s):</span> <span class="meta-value">{{join item.screenwriters ", "}}</span></div>{{/if}}
+                {{#if item.authors.length}}<div class="meta-item"><span class="meta-label">Author(s):</span> <span class="meta-value">{{join item.authors ", "}}</span></div>{{/if}}
+                 {{#if item.developers.length}}<div class="meta-item"><span class="meta-label">Developer(s):</span> <span class="meta-value">{{join item.developers ", "}}</span></div>{{/if}}
+                {{#if item.publisher}}<div class="meta-item"><span class="meta-label">Publisher:</span> <span class="meta-value">{{item.publisher}}</span></div>{{/if}}
+                {{#if item.platforms.length}}<div class="meta-item"><span class="meta-label">Platform(s):</span> <span class="meta-value">{{join item.platforms ", "}}</span></div>{{/if}}
+                 {{#if item.pageCount}}<div class="meta-item"><span class="meta-label">Pages:</span> <span class="meta-value">{{item.pageCount}}</span></div>{{/if}}
+
+                 {{#if item.apiRating}}
+                 <div class="meta-item">
+                     <span class="meta-label">Community Rating:</span>
+                     <span class="meta-value rating-display">
+                        {{item.apiRating}}/10
+                     </span>
+                 </div>
+
+                 {{#if item.userRating}}
+                 <div class="meta-item">
+                     <span class="meta-label">My Rating:</span>
+                     <span class="meta-value">
+                         <span class="my-rating-value">{{item.userRating}}</span>/20
+                     </span>
+                 </div>
+                {{/if}}
+
+                 {{/if}}
+                 {{!-- External Links --}}
+                  <div class="meta-item external-links">
+                     {{#if item.imdbId}} <a href="https://www.imdb.com/title/{{item.imdbId}}/" target="_blank" rel="noopener">IMDb</a> {{/if}}
+                     {{#if item.tmdbLink}} <a href="{{item.tmdbLink}}" target="_blank" rel="noopener">TMDB</a> {{/if}}
+                     {{#if item.googleBooksLink}} <a href="{{item.googleBooksLink}}" target="_blank" rel="noopener">Google Books</a> {{/if}}
+                     {{#if item.igdbLink}} <a href="{{item.igdbLink}}" target="_blank" rel="noopener">IGDB</a> {{/if}}
+                 </div>
+            </div>
         </section>
 
-        {{!-- Trailer Section (NEW) --}}
+
+        {{!-- Trailer Section --}}
         {{#if item.trailerVideoId}}
         <section class="detail-trailer-section card">
             <h3>Trailer</h3>

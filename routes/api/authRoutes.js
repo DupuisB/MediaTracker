@@ -1,5 +1,4 @@
 // routes/api/authRoutes.js
-// Keep existing file content. No changes needed here.
 const express = require('express');
 const db = require('../../database'); // Use the promisified db
 const { hashPassword, comparePassword, setAuthCookie, clearAuthCookie } = require('../../auth');

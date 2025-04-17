@@ -8,9 +8,7 @@ const contentArea = document.querySelector('.tab-content-area');
 let templates = {}; // Cache for Handlebars partials
 
 async function loadTemplates() {
-    // Pre-load necessary templates
     templates.mediaCard = await getTemplate('mediaCard');
-    // Add others if needed
 }
 
 function renderContent(type, data) {
@@ -129,7 +127,6 @@ async function initHomepageTabs() {
     console.log("Initializing homepage tabs...");
     await loadTemplates(); // Load Handlebars partials first
     tabContainer.addEventListener('click', handleTabClick);
-    // Ensure initial Swipers (for server-rendered content) are initialized by main.js
 }
 
 export { initHomepageTabs };

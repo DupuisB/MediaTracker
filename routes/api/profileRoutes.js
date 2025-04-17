@@ -117,8 +117,7 @@ router.put('/me', async (req, res) => {
             `SELECT id, username, profileImageUrl, profilePrivacy, createdAt FROM users WHERE id = ?`,
             [userId]
         );
-         // Refetch stats as well? No, stats aren't changed by profile update. Call the GET /api/profile/:userId instead?
-         // For now, just return the updated basic user data.
+        // For now, just return the updated basic user data.
         res.status(200).json({
              id: updatedUser.id,
              username: updatedUser.username,

@@ -125,9 +125,6 @@
     .logo-text {
         display: none; /* Hide text on small screens */
     }
-    .user-nav {
-        /* Adjust spacing if needed */
-    }
 }
 
 @media (max-width: 480px) {

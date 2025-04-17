@@ -37,7 +37,6 @@ import { closeModal, deleteConfirmModal, formModal, handleDeleteConfirm } from '
             } else if (event.target.id === 'listForm') {
                 handleListFormSubmit(event); // Call imported handler
             }
-            // Add other modal form IDs if needed
         });
 
         // Add global status message area

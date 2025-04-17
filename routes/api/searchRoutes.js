@@ -6,7 +6,7 @@ const { getIgdbHeaders, convertRatingTo10 } = require('./igdbAuthHelper'); // Us
 
 const router = express.Router();
 
-// --- Environment Variable Checks & API URLs (Keep as before) ---
+// --- Environment Variable Checks & API URLs ---
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
 const IGDB_CLIENT_ID = process.env.IGDB_CLIENT_ID;

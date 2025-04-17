@@ -1,103 +1,144 @@
-# Folder Architecture for `C:\Users\benjamin\Documents\igr\MediaTracker`
+# Folder Architecture for `/home/benjamin/Documents/Télécom/IGR/MediaTracker/`
 
 ## Folder Structure
 
-- MediaTracker/
+- /
+    - package-lock.json
+    - package.json
+    - server.md
+    - useless.py
     - .env
     - .gitignore
     - auth.js
     - database.js
+    - doc.md
     - folder_structure.md
-    - package-lock.json
-    - package.json
     - server.js
-    - server.md
     - test.md
-    - useless.py
     - watchlist_v2.db
-    - public/
-        - css/
-            - style.css
-            - base/
-                - _base.css
-                - _reset.css
-                - _variables.css
-            - components/
-                - _buttons.css
-                - _card.css
-                - _forms.css
-                - _listRow.css
-                - _modal.css
-                - _navigation.css
-                - _spinner.css
-                - _swiper.css
-                - _tags.css
-                - _userInteraction.css
-            - layout/
-                - _container.css
-                - _footer.css
-                - _header.css
-            - pages/
-                - _auth.css
-                - _home.css
-                - _lists.css
-                - _mediaDetail.css
-                - _searchResults.css
-                - _userProfile.css
-            - utils/
-                - _helpers.css
-        - images/
-            - placeholder.png
-            - placeholder_avatar.png
-        - js/
-            - main.js
-            - modules/
-                - api.js
-                - authHandlers.js
-                - homepageHandlers.js
-                - libraryHandlers.js
-                - listHandlers.js
-                - profileHandlers.js
-                - swiperSetup.js
-                - templates.js
-                - ui.js
-    - routes/
-        - viewRoutes.js
-        - api/
-            - authRoutes.js
-            - detailsRoutes.js
-            - homepageDataRoutes.js
-            - igdbAuthHelper.js
-            - libraryRoutes.js
-            - listRoutes.js
-            - profileRoutes.js
-            - searchRoutes.js
-    - views/
-        - about.hbs
-        - error.hbs
-        - home.hbs
-        - listDetail.hbs
-        - login.hbs
-        - mediaDetail.hbs
-        - searchResults.hbs
-        - userListsOverview.hbs
-        - userProfile.hbs
-        - layouts/
-            - auth.hbs
-            - main.hbs
-        - partials/
-            - footer.hbs
-            - header.hbs
-            - itemFormModal.hbs
-            - libraryControls.hbs
-            - listItemRow.hbs
-            - listSummaryRow.hbs
-            - loginForm.hbs
-            - mediaCard.hbs
-            - registerForm.hbs
-            - userInteractionControls.hbs
+- public/
+    - css/
+        - style.css
+        - base/
+            - _base.css
+            - _reset.css
+            - _variables.css
+        - components/
+            - _buttons.css
+            - _card.css
+            - _forms.css
+            - _listRow.css
+            - _modal.css
+            - _navigation.css
+            - _spinner.css
+            - _swiper.css
+            - _tags.css
+            - _userInteraction.css
+        - layout/
+            - _container.css
+            - _footer.css
+            - _header.css
+        - utils/
+            - _helpers.css
+        - pages/
+            - _auth.css
+            - _home.css
+            - _lists.css
+            - _mediaDetail.css
+            - _searchResults.css
+            - _userProfile.css
+    - images/
+        - placeholder.png
+        - placeholder_avatar.png
+    - js/
+        - main.js
+        - modules/
+            - api.js
+            - authHandlers.js
+            - homepageHandlers.js
+            - libraryHandlers.js
+            - listHandlers.js
+            - profileHandlers.js
+            - swiperSetup.js
+            - templates.js
+            - ui.js
+- routes/
+    - viewRoutes.js
+    - api/
+        - authRoutes.js
+        - detailsRoutes.js
+        - homepageDataRoutes.js
+        - igdbAuthHelper.js
+        - libraryRoutes.js
+        - listRoutes.js
+        - profileRoutes.js
+        - searchRoutes.js
+- views/
+    - about.hbs
+    - error.hbs
+    - home.hbs
+    - listDetail.hbs
+    - login.hbs
+    - mediaDetail.hbs
+    - searchResults.hbs
+    - userListsOverview.hbs
+    - userProfile.hbs
+    - layouts/
+        - auth.hbs
+        - main.hbs
+    - partials/
+        - libraryControls.hbs
+        - footer.hbs
+        - header.hbs
+        - itemFormModal.hbs
+        - listItemRow.hbs
+        - listSummaryRow.hbs
+        - loginForm.hbs
+        - mediaCard.hbs
+        - registerForm.hbs
+        - userInteractionControls.hbs
 
 ## Code Files
+
+### package.json
+
+```json
+{
+  "name": "watchlist-backend",
+  "version": "1.0.0",
+  "description": "Backend for the Watchlist & Media Library App",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "watchlist",
+    "media",
+    "library",
+    "node",
+    "express",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-handlebars": "^7.1.2",
+    "jsonwebtoken": "^9.0.2",
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
+```
 
 ### auth.js
 
@@ -148,7 +189,7 @@ function setAuthCookie(res, user) {
         });
     } catch (error) {
         console.error('Error setting auth cookie:', error);
-        // Handle the error appropriately, maybe send an error response earlier
+        throw new Error('Failed to set authentication cookie.');
     }
 }
 
@@ -398,46 +439,6 @@ function initializeDatabaseV2() {
 
 // Export the db object with the added Async methods
 module.exports = db;
-```
-
-### package.json
-
-```json
-{
-  "name": "watchlist-backend",
-  "version": "1.0.0",
-  "description": "Backend for the Watchlist & Media Library App",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [
-    "watchlist",
-    "media",
-    "library",
-    "node",
-    "express",
-    "sqlite"
-  ],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "axios": "^1.6.8",
-    "bcrypt": "^5.1.1",
-    "cookie-parser": "^1.4.6",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-handlebars": "^7.1.2",
-    "jsonwebtoken": "^9.0.2",
-    "sqlite3": "^5.1.7"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
-  }
-}
 ```
 
 ### server.js
@@ -2148,6 +2149,32 @@ footer {
 }
 ```
 
+### _helpers.css
+
+```css
+/* Visually hide element but keep it accessible */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+  
+  /* Hide element visually and from screen readers */
+  .hidden {
+      display: none !important;
+  }
+  
+  /* Add more utility classes as needed, e.g., for text alignment, margins */
+  .text-center { text-align: center; }
+  /* etc. */
+```
+
 ### _auth.css
 
 ```css
@@ -2934,32 +2961,6 @@ footer {
      .profile-details h2 { font-size: var(--font-size-h3); }
      .stat-item { flex-basis: 100%; } /* Stack stats */
 }
-```
-
-### _helpers.css
-
-```css
-/* Visually hide element but keep it accessible */
-.sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
-  }
-  
-  /* Hide element visually and from screen readers */
-  .hidden {
-      display: none !important;
-  }
-  
-  /* Add more utility classes as needed, e.g., for text alignment, margins */
-  .text-center { text-align: center; }
-  /* etc. */
 ```
 
 ### main.js
@@ -7100,6 +7101,39 @@ module.exports = router;
 
 ```
 
+### libraryControls.hbs
+
+```hbs
+<div id="libraryControls" class="library-controls">
+    <button id="getLibraryBtn" class="btn btn-secondary btn-small" title="Refresh Library">🔄</button>
+    <div class="filters">
+        <span class="filter-label sr-only">Filter by:</span>
+        <select id="filterMediaType" title="Filter by Type">
+            <option value="">All Types</option>
+            <option value="movie">Movie</option>
+            <option value="series">Series</option>
+            <option value="book">Book</option>
+            <option value="video game">Video Game</option>
+        </select>
+        <select id="filterStatus" title="Filter by Status">
+            <option value="">All Statuses</option>
+            <option value="to watch">To Watch</option>
+            <option value="watching">Watching</option>
+            <option value="watched">Watched</option>
+            <option value="to read">To Read</option>
+            <option value="reading">Reading</option>
+            <option value="read">Read</option>
+             <option value="to play">To Play</option>
+            <option value="playing">Playing</option>
+            <option value="played">Played</option>
+        </select>
+        <input type="number" id="filterMinRating" min="1" max="20" placeholder="Min Rate" title="Minimum User Rating">
+        <input type="number" id="filterMaxRating" min="1" max="20" placeholder="Max Rate" title="Maximum User Rating">
+    </div>
+     <div id="librarySpinner" class="spinner hidden"></div>
+</div>
+```
+
 ### footer.hbs
 
 ```hbs
@@ -7209,39 +7243,6 @@ module.exports = router;
      <p class="modal-error-message hidden"></p>
 </form>
 
-```
-
-### libraryControls.hbs
-
-```hbs
-<div id="libraryControls" class="library-controls">
-    <button id="getLibraryBtn" class="btn btn-secondary btn-small" title="Refresh Library">🔄</button>
-    <div class="filters">
-        <span class="filter-label sr-only">Filter by:</span>
-        <select id="filterMediaType" title="Filter by Type">
-            <option value="">All Types</option>
-            <option value="movie">Movie</option>
-            <option value="series">Series</option>
-            <option value="book">Book</option>
-            <option value="video game">Video Game</option>
-        </select>
-        <select id="filterStatus" title="Filter by Status">
-            <option value="">All Statuses</option>
-            <option value="to watch">To Watch</option>
-            <option value="watching">Watching</option>
-            <option value="watched">Watched</option>
-            <option value="to read">To Read</option>
-            <option value="reading">Reading</option>
-            <option value="read">Read</option>
-             <option value="to play">To Play</option>
-            <option value="playing">Playing</option>
-            <option value="played">Played</option>
-        </select>
-        <input type="number" id="filterMinRating" min="1" max="20" placeholder="Min Rate" title="Minimum User Rating">
-        <input type="number" id="filterMaxRating" min="1" max="20" placeholder="Max Rate" title="Maximum User Rating">
-    </div>
-     <div id="librarySpinner" class="spinner hidden"></div>
-</div>
 ```
 
 ### listItemRow.hbs

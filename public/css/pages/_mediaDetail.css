@@ -1,7 +1,4 @@
 /* public/css/pages/_mediaDetail.css */
-.media-detail-page {
-    /* Container already provides padding */
-}
 
 /* Backdrop */
 .backdrop-image {
@@ -65,7 +62,7 @@
 }
 .detail-subtitle {
     font-size: var(--font-size-lg);
-    color: #e2e8f0; /* Lighter text */
+    color: var(--color-text-lighter);
     margin-bottom: var(--space-md);
     font-style: italic;
     text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
@@ -76,10 +73,10 @@
     flex-wrap: wrap;
     gap: var(--space-sm) var(--space-md);
     align-items: center;
-    color: #cbd5e0; /* Lighter meta text */
+    color: var(--color-text-light); /* Use regular text color now */
 }
 .detail-meta .tag {
-     background-color: rgba(255,255,255, 0.2);
+     background-color: rgb(255, 0, 0);
      color: var(--color-text-inverse);
      border: none;
      font-size: var(--font-size-xs);

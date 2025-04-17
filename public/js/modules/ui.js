@@ -190,6 +190,6 @@ export {
     closeModal,
     setupDeleteConfirmation,
     handleDeleteConfirm,
-    formModal, // Export modal elements if needed by other modules
+    formModal,
     deleteConfirmModal
 };

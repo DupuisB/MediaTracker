@@ -6,7 +6,7 @@ const { getIgdbHeaders, convertRatingTo10 } = require('./igdbAuthHelper');
 
 const router = express.Router();
 
-// --- Constants and Helpers (Keep existing TMDB/Google/IGDB URLs, getYear, fetchData, fetchIgdbData) ---
+// --- Constants and Helpers  ---
 const TMDB_API_KEY = process.env.TMDB_API_KEY;
 const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY;
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
@@ -70,8 +70,8 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
         subtitle: null,
         description: null,
         imageUrl: null, // Main poster/cover
-        bannerImageUrl: null, // <-- NEW: For backdrop/screenshot
-        trailerVideoId: null, // <-- NEW: For YouTube trailer key
+        bannerImageUrl: null,
+        trailerVideoId: null,
         releaseDate: null,
         releaseYear: null,
         apiRating: null,
@@ -92,7 +92,6 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 if (!TMDB_API_KEY) throw new Error('TMDB API Key missing.');
                 const isMovie = mediaType === 'movie';
                 const basePath = isMovie ? 'movie' : 'tv';
-                // MODIFIED: Append 'videos' to get trailer info
                 const detailsUrl = `${TMDB_BASE_URL}/${basePath}/${mediaId}?api_key=${TMDB_API_KEY}&language=en-US&append_to_response=credits,external_ids,videos`;
 
                 apiResponseData = await fetchData(detailsUrl);
@@ -103,7 +102,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                      return res.status(status).json({ message });
                  }
 
-                // --- Basic Details (keep as before) ---
+                // --- Basic Details  ---
                 combinedDetails.title = isMovie ? apiResponseData.title : apiResponseData.name;
                 combinedDetails.subtitle = apiResponseData.tagline || null;
                 combinedDetails.description = apiResponseData.overview;
@@ -114,7 +113,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
                 combinedDetails.imdbId = apiResponseData.external_ids?.imdb_id || null;
                 combinedDetails.tmdbLink = `https://www.themoviedb.org/${basePath}/${mediaId}`;
-                // --- Credits (keep as before) ---
+                // --- Credits ---
                 if (apiResponseData.credits) {
                     combinedDetails.cast = apiResponseData.credits.cast?.slice(0, 10).map(c => ({ name: c.name, character: c.character, profilePath: c.profile_path })) || []; // Get profile picture path too
                     apiResponseData.credits.crew?.forEach(c => {
@@ -126,12 +125,12 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                     combinedDetails.screenwriters = [...new Set(combinedDetails.screenwriters)];
                  }
 
-                // --- NEW: Extract Banner Image ---
+                // --- Extract Banner Image ---
                 if (apiResponseData.backdrop_path) {
                     combinedDetails.bannerImageUrl = `https://image.tmdb.org/t/p/w1280${apiResponseData.backdrop_path}`; // Use a wide size
                 }
 
-                // --- NEW: Extract Trailer Video ---
+                // --- Extract Trailer Video ---
                 if (apiResponseData.videos?.results?.length > 0) {
                     // Find the first official trailer on YouTube
                     const trailer = apiResponseData.videos.results.find(
@@ -148,7 +147,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 break;
 
             case 'book':
-                // Fetch book details (no changes needed here for banner/trailer)
+                // Fetch book details
                 const bookUrl = `${GOOGLE_BOOKS_BASE_URL}/${mediaId}?${GOOGLE_BOOKS_API_KEY ? 'key=' + GOOGLE_BOOKS_API_KEY : ''}`;
                 apiResponseData = await fetchData(bookUrl);
 
@@ -158,7 +157,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                    return res.status(status).json({ message });
                 }
                 const volInfo = apiResponseData.volumeInfo;
-                // --- Populate details (keep as before) ---
+                // --- Populate details ---
                 combinedDetails.title = volInfo.title;
                 combinedDetails.subtitle = volInfo.subtitle || (volInfo.authors ? volInfo.authors.join(', ') : null);
                 combinedDetails.description = volInfo.description;
@@ -171,11 +170,9 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 combinedDetails.publisher = volInfo.publisher || null;
                 combinedDetails.pageCount = volInfo.pageCount || null;
                 combinedDetails.googleBooksLink = volInfo.infoLink || null;
-                // Banner and Trailer remain null for books
                 break;
 
             case 'video game':
-                 // MODIFIED: Add screenshots.url and videos.video_id to the query
                 const gameQuery = `
                     fields
                         name, summary, storyline, url,
@@ -192,7 +189,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                     return res.status(status).json({ message: `Game details not found on IGDB (${status}).` });
                 }
 
-                // --- Basic Details (keep as before) ---
+                // --- Basic Details ---
                 combinedDetails.title = apiResponseData.name;
                 combinedDetails.description = apiResponseData.summary || apiResponseData.storyline;
                 combinedDetails.imageUrl = apiResponseData.cover?.url ? apiResponseData.cover.url.replace('t_thumb', 't_cover_big').replace(/^\/\//, 'https://') : null;
@@ -202,7 +199,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                 combinedDetails.genres = apiResponseData.genres?.map(g => g.name) || [];
                 combinedDetails.platforms = apiResponseData.platforms?.map(p => p.name) || [];
                 combinedDetails.igdbLink = apiResponseData.url || null;
-                // --- Involved Companies (keep as before) ---
+                // --- Involved Companies ---
                 if (apiResponseData.involved_companies) {
                    apiResponseData.involved_companies.forEach(ic => {
                        if (ic.company?.name) {
@@ -213,7 +210,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                    combinedDetails.developers = [...new Set(combinedDetails.developers)];
                 }
 
-                // --- NEW: Extract Banner Image (from screenshots) ---
+                // --- Extract Banner Image (from screenshots) ---
                 if (apiResponseData.screenshots?.length > 0) {
                     // Use the first screenshot as a banner
                     let bannerUrl = apiResponseData.screenshots[0].url;
@@ -224,7 +221,7 @@ router.get('/:mediaType/:mediaId', async (req, res) => {
                     }
                 }
 
-                // --- NEW: Extract Trailer Video ---
+                // --- Extract Trailer Video ---
                 if (apiResponseData.videos?.length > 0) {
                     // Use the first video ID found
                     combinedDetails.trailerVideoId = apiResponseData.videos[0].video_id;

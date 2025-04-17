@@ -1,6 +1,6 @@
 // public/js/modules/swiperSetup.js
 
-let swiperInstances = []; // Keep track of instances
+let swiperInstances = [];
 
 /**
  * Initializes all Swiper instances on the current page.

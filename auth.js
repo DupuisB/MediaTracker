@@ -44,7 +44,7 @@ function setAuthCookie(res, user) {
         });
     } catch (error) {
         console.error('Error setting auth cookie:', error);
-        // Handle the error appropriately, maybe send an error response earlier
+        throw new Error('Failed to set authentication cookie.');
     }
 }
 
@@ -69,7 +69,7 @@ function verifyToken(req, res, next) {
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.userId = decoded.id; // Add user ID for API route handlers
-        req.user = decoded; // Optional: Add full decoded payload (username, id)
+        req.user = decoded;
         next();
     } catch (error) {
         clearAuthCookie(res); // Clear invalid/expired cookie
@@ -107,8 +107,6 @@ function checkAuthStatus(req, res, next) {
 // Protect View Route Middleware (Redirects if not logged in)
 function requireLogin(req, res, next) {
     if (!res.locals.user) {
-        // Optional: Store intended URL using session middleware if needed
-        // req.session.returnTo = req.originalUrl;
         return res.redirect('/login'); // Redirect to new login page route
     }
     next(); // User is logged in

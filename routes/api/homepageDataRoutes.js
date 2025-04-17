@@ -1,4 +1,4 @@
-// routes/api/homepageDataRoutes.js (NEW FILE)
+// routes/api/homepageDataRoutes.js
 const express = require('express');
 const axios = require('axios');
 require('dotenv').config();
@@ -82,7 +82,6 @@ router.get('/', async (req, res) => {
                  break;
             case 'book':
                 // Using 'newest' as a proxy for 'hot'/'recommendations' for books
-                // Alternatively use a generic query like 'subject:fiction' or 'subject:popular'
                 apiUrl = `${GOOGLE_BOOKS_BASE_URL}?q=subject:fiction&orderBy=newest&maxResults=${limit}${GOOGLE_BOOKS_API_KEY ? '&key=' + GOOGLE_BOOKS_API_KEY : ''}&langRestrict=en&printType=books`;
                 responseDataPath = 'items'; // Google Books path
                  break;
@@ -120,7 +119,7 @@ router.get('/', async (req, res) => {
             results = rawResults.slice(0, limit).map(item => mapToCard(item, mapType));
         }
 
-        // Return same data for both 'hottest' and 'recommendations' for now
+        // Return same data for both 'hottest' and 'recommendations' for now (needs improvement)
         res.status(200).json({
              hottest: results,
              recommendations: results

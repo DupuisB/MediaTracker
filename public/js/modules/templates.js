@@ -9,7 +9,7 @@ function setupHandlebarsHelpers() {
         console.warn('Handlebars runtime not found. Cannot register helpers.');
         return;
     }
-    // Register helpers (ensure these match server-side helpers)
+    // Register helpers
     const helpers = {
         eq: (v1, v2) => v1 === v2,
         json: (context) => JSON.stringify(context),

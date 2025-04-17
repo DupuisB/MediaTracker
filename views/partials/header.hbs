@@ -2,7 +2,6 @@
 <header class="site-header">
     <div class="container header-content">
         <a href="/" class="logo" aria-label="Homepage">
-            {{!-- Replace with actual SVG or Image Logo --}}
             <span class="logo-icon">🎬</span>
             <span class="logo-text">MediaTracker</span>
         </a>
@@ -22,8 +21,7 @@
             {{#if user}}
                 <a href="/profile" class="profile-link" aria-label="My Profile">
                     {{!-- Placeholder Profile Icon/Image --}}
-                    <img src="{{user.profileImageUrl}}" alt="My Profile" class="profile-icon" onerror="this.src='/images/placeholder_avatar.png';">
-                    {{!-- <span class="profile-icon">👤</span> --}}
+                    <img src="{{user.profileImageUrl}}" alt="My Profile" class="profile-icon" onerror="this.src='/images/bookshelf.png';">
                 </a>
                  <button id="logoutBtn" class="btn btn-secondary btn-small" title="Logout">Logout</button>
             {{else}}

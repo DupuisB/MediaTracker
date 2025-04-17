@@ -58,8 +58,8 @@ main.container {
 
 /* Status/feedback messages */
 .status-message,
-.error-message, /* Keep for general errors */
-.success-message { /* Keep for general success */
+.error-message,
+.success-message {
     padding: var(--space-sm) var(--space-md);
     margin-bottom: var(--space-md);
     border-radius: var(--border-radius-sm);
@@ -89,7 +89,7 @@ main.container {
     border-color: var(--color-warning);
 }
 
-/* Global status message (fixed potentially) */
+/* Global status message */
 #globalStatus {
     position: fixed;
     bottom: var(--space-md);

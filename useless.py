@@ -63,7 +63,7 @@ def save_markdown(markdown_content, output_file):
         f.write(markdown_content)
 
 def main():
-    folder_path = "C:\\Users\\benjamin\\Documents\\igr\\MediaTracker"
+    folder_path = "/home/benjamin/Documents/Télécom/IGR/MediaTracker/"
     output_file = "folder_structure.md"
     
     if not os.path.isdir(folder_path):

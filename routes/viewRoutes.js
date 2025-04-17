@@ -36,12 +36,11 @@ const mapTmdbToCardData = (item) => ({
     title: item.title,
     imageUrl: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : '/images/placeholder.png', // Card image size
     releaseYear: getYear(item.release_date),
-    // Add other fields if needed by the card partial in the future
 });
 
 // --- Public Routes ---
 
-// Homepage (Refactored with TMDB Trending)
+// Homepage
 router.get('/', async (req, res, next) => {
     let watchlistItems = [];
     let initialHottest = []; // For the default tab (Movies)
@@ -64,11 +63,11 @@ router.get('/', async (req, res, next) => {
         }
     }
 
-    // 2. Fetch Initial Tab Data (Movies - Popular) from our new API endpoint
+    // 2. Fetch Initial Tab Data (Movies - Popular) from our API endpoint
     try {
         const apiUrl = getApiUrl(req);
         const response = await axios.get(`${apiUrl}/homepage-data?type=${defaultTabType}`, {
-             headers: { Cookie: req.headers.cookie } // May not be needed if endpoint is public
+             headers: { Cookie: req.headers.cookie }
         });
         initialHottest = response.data.hottest || [];
         initialRecommendations = response.data.recommendations || [];
@@ -201,7 +200,7 @@ router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) =>
     }
 });
 
-// Search Results Page (New) - Keep as is
+// Search Results Page
 router.get('/search', requireLogin, async (req, res, next) => {
     const query = req.query.q || '';
     const apiUrl = getApiUrl(req);
@@ -253,7 +252,7 @@ router.get('/search', requireLogin, async (req, res, next) => {
 });
 
 
-// User Profile Page (New - Basic Implementation) - Keep as is
+// User Profile Page
 router.get('/profile', requireLogin, async (req, res, next) => { // Route for logged-in user's own profile
      await renderProfilePage(req, res, next, res.locals.user.id); // Call helper with logged-in user's ID
 });
@@ -283,21 +282,16 @@ async function renderProfilePage(req, res, next, profileUserId) {
        });
        const profileData = profileResponse.data;
 
-       // --- NEW: Fetch Default Library Lists ---
        const listFetchPromises = [
-           // Recently Completed (status=completed, sort=completedAt desc)
            axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=completed&sortBy=completedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Completed):", e.message); return []; }),
-           // Watchlist (status=planned, sort=updatedAt desc)
            axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=planned&sortBy=updatedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Planned):", e.message); return []; }),
-           // Currently Engaging (status=watching, sort=updatedAt desc)
            axios.get(`${apiUrl}/library?userId=${profileUserId}&userStatus=watching&sortBy=updatedAt&limit=${itemsPerList}`, { headers: { Cookie: req.headers.cookie } }).then(r => r.data).catch(e => { console.error("Profile Fetch Error (Watching):", e.message); return []; })
        ];
 
        const [recentlyCompletedItems, plannedItems, watchingItems] = await Promise.all(listFetchPromises);
-       // --- End NEW ---
 
 
-        // Fetch 'Public Lists' - KEEP AS IS
+        // Fetch 'Public Lists'
         let publicLists = [];
         if (profileData.profilePrivacy === 'public' || isOwnProfile) {
             const listsResponse = await axios.get(`${apiUrl}/lists?userId=${profileUserId}&publicOnly=${profileData.profilePrivacy !== 'public' && !isOwnProfile ? 'true' : 'false'}&limit=10`, { // API needs to support filtering
@@ -311,11 +305,9 @@ async function renderProfilePage(req, res, next, profileUserId) {
            pageTitle: `${profileData.username}'s Profile`,
            profile: profileData,
            isOwnProfile: isOwnProfile,
-           // --- Pass NEW lists to the template ---
            recentlyCompletedItems: recentlyCompletedItems,
            plannedItems: plannedItems,
            watchingItems: watchingItems,
-           // --- Keep publicLists ---
            publicLists: publicLists,
             // user (logged in user) is already in res.locals
        });
@@ -330,7 +322,7 @@ async function renderProfilePage(req, res, next, profileUserId) {
     }
 }
 
-// User Lists Overview Page (New) - Keep as is
+// User Lists Overview Page
 router.get('/lists', requireLogin, async (req, res, next) => {
     const userId = req.locals.user.id;
     const apiUrl = getApiUrl(req);
@@ -356,7 +348,7 @@ router.get('/lists', requireLogin, async (req, res, next) => {
     }
 });
 
-// List Detail Page (New) - Keep as is
+// List Detail Page
 router.get('/lists/:listId', requireLogin, async (req, res, next) => {
     const listId = req.params.listId;
     const userId = res.locals.user.id;
@@ -397,17 +389,15 @@ router.get('/lists/:listId', requireLogin, async (req, res, next) => {
 });
 
 
-// --- Route for Client-Side Handlebars Partials --- - Keep as is
-// Keep this, but update allowed partials
+// --- Route for Client-Side Handlebars Partials ---
 const ALLOWED_PARTIALS = new Set([
-    'mediaCard', // Keep
-    'itemFormModal', // Keep for add/edit actions
-    'userInteractionControls', // Updated name
-    'listSummaryRow', // New
-    'listItemRow', // New
-    'loginForm', // For potential future use?
-    'registerForm', // For potential future use?
-    // Add others as needed
+    'mediaCard',
+    'itemFormModal',
+    'userInteractionControls',
+    'listSummaryRow',
+    'listItemRow',
+    'loginForm',
+    'registerForm',
 ]);
 const partialsDir = path.join(__dirname, '../views/partials');
 
