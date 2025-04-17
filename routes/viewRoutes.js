@@ -122,7 +122,7 @@ router.get('/login', (req, res) => {
 // Media Detail Page (New) - Keep as is
 router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) => {
     const { mediaType, mediaId } = req.params;
-    const userId = res.locals.user.id;
+    const userId = res.locals.user ? res.locals.user.id : null;
     const apiUrl = getApiUrl(req);
 
     try {
@@ -134,20 +134,24 @@ router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) =>
 
         // 2. Fetch User's Library/Interaction data for this item from our API
         let userInteraction = null;
-        try {
-             const interactionResponse = await axios.get(`${apiUrl}/library/item/${mediaType}/${mediaId}`, {
-                 headers: { Cookie: req.headers.cookie } // Auth required here
-             });
-             userInteraction = interactionResponse.data;
-        } catch (error) {
-            if (error.response && error.response.status === 404) {
-                // Item not in library, this is fine.
-                userInteraction = null;
-            } else {
-                // Rethrow other errors
-                throw error;
+        if (userId) { // Only try fetching if logged in
+            try {
+                 const interactionResponse = await axios.get(`${apiUrl}/library/item/${mediaType}/${mediaId}`, {
+                     headers: { Cookie: req.headers.cookie } // Auth required here
+                 });
+                 userInteraction = interactionResponse.data;
+            } catch (error) {
+                if (error.response && error.response.status === 404) {
+                    userInteraction = null; // Item not in library
+                } else if (error.response && error.response.status === 401) {
+                    // Should not happen, but handle defensively
+                    console.warn('Auth error fetching interaction data despite checkAuthStatus.');
+                    userInteraction = null;
+                } else {
+                    throw error;
+                }
             }
-        }
+        } // End if(userId)
 
         // 3. Combine data for the template
         const combinedData = {
@@ -201,28 +205,26 @@ router.get('/media/:mediaType/:mediaId', requireLogin, async (req, res, next) =>
 });
 
 // Search Results Page
-router.get('/search', requireLogin, async (req, res, next) => {
+router.get('/search', async (req, res, next) => {
     const query = req.query.q || '';
     const apiUrl = getApiUrl(req);
 
     if (!query) {
-        // Render search page without results if no query
         return res.render('searchResults', {
              pageTitle: 'Search',
              query: '',
-             results: {}, // Empty results object
-             // user is already in res.locals
+             results: {},
+             user: res.locals.user
          });
     }
 
     try {
-        // Fetch results for all categories concurrently
+        // Fetch results
         const types = ['movie', 'series', 'book', 'video game'];
         const searchPromises = types.map(type =>
             axios.get(`${apiUrl}/search?type=${type}&query=${encodeURIComponent(query)}`, {
-                 headers: { Cookie: req.headers.cookie } // Forward cookie
             }).then(response => ({ type, data: response.data }))
-              .catch(err => {
+            .catch(err => {
                   console.error(`Search API error for type ${type}:`, err.response?.data || err.message);
                   return { type, data: [], error: true }; // Return empty on error for this type
               })
@@ -233,8 +235,7 @@ router.get('/search', requireLogin, async (req, res, next) => {
         // Organize results by type
         const categorizedResults = {};
         searchResultsArray.forEach(result => {
-            // Map 'video game' results to 'video_game' key if template expects that
-            const key = result.type === 'video game' ? 'video_game' : result.type;
+            const key = result.type === 'video game' ? 'video game' : result.type;
             categorizedResults[key] = result.data;
         });
 
@@ -401,21 +402,26 @@ const ALLOWED_PARTIALS = new Set([
 ]);
 const partialsDir = path.join(__dirname, '../views/partials');
 
-router.get('/templates/:templateName', requireLogin, async (req, res) => {
+router.get('/templates/:templateName', async (req, res) => {
     const templateName = req.params.templateName;
 
     if (!ALLOWED_PARTIALS.has(templateName)) {
-        console.warn(`Template request blocked: ${templateName}`); // Log blocked attempts
+        console.warn(`Template request blocked: ${templateName}`);
         return res.status(404).send('Template not found or not allowed.');
     }
     const filePath = path.join(partialsDir, `${templateName}.hbs`);
     try {
         await fs.access(filePath);
-        res.type('text/html'); // Or 'text/x-handlebars-template'
+        res.type('text/html');
         res.sendFile(filePath);
     } catch (error) {
-        console.error(`Error serving template ${templateName}:`, error);
-        res.status(404).send('Template not found.');
+        if (error.code === 'ENOENT') {
+             console.error(`Template file not found: ${filePath}`);
+             res.status(404).send('Template not found.');
+        } else {
+            console.error(`Error serving template ${templateName}:`, error);
+            res.status(500).send('Error serving template.');
+        }
     }
 });
 

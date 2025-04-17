@@ -64,10 +64,6 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         const message = error.data?.message || error.message || 'An unknown API error occurred.';
         showStatusMessage('globalStatus', message, 'error', 5000); // Show error globally
 
-        if (error.status === 401) { // Handle critical auth errors
-             showStatusMessage('globalStatus', 'Authentication error. Redirecting to login...', 'error', 5000);
-             setTimeout(() => { window.location.href = '/login?errorMessage=Session expired. Please login again.'; }, 1500);
-        }
         throw error; // Re-throw for calling function
     }
 }
