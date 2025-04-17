@@ -4,7 +4,7 @@
         {{!-- Profile Header content remains the same --}}
         <div class="profile-banner"></div>
         <div class="profile-info">
-             <img src="{{defaultIfEmpty profile.profileImageUrl '/images/placeholder_avatar.png'}}" alt="{{profile.username}}'s Profile Picture" class="profile-picture" onerror="this.onerror=null; this.src='/images/placeholder_avatar.png';">
+             <img src="{{defaultIfEmpty profile.profileImageUrl '/images/cat.svg'}}" alt="{{profile.username}}'s Profile Picture" class="profile-picture" onerror="this.onerror=null; this.src='/images/cat.svg';">
             <div class="profile-details">
                 <h2>{{profile.username}}</h2>
                 <p class="member-since">Member since {{formatDate profile.memberSince}}</p>

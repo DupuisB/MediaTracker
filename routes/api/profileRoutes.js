@@ -57,7 +57,7 @@ router.get('/:userId', async (req, res) => {
         res.status(200).json({
             id: user.id,
             username: user.username,
-            profileImageUrl: user.profileImageUrl || '/images/placeholder_avatar.png', // Default avatar
+            profileImageUrl: user.profileImageUrl || '/images/cat.svg', // Default avatar
             profilePrivacy: user.profilePrivacy,
             memberSince: user.createdAt,
             // Include fetched stats
@@ -121,7 +121,7 @@ router.put('/me', async (req, res) => {
         res.status(200).json({
              id: updatedUser.id,
              username: updatedUser.username,
-             profileImageUrl: updatedUser.profileImageUrl || '/images/placeholder_avatar.png',
+             profileImageUrl: updatedUser.profileImageUrl || '/images/cats.svg',
              profilePrivacy: updatedUser.profilePrivacy,
              memberSince: updatedUser.createdAt
         });
