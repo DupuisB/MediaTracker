@@ -9,6 +9,8 @@
                 {{#if this.length}} {{!-- Only create tab if category has results --}}
                      {{!-- Set active class based on initial search type if passed, otherwise handled by JS --}}
                      <button class="nav-item" data-filter="{{@key}}">
+                        <img src="/images/{{@key}}.svg" alt="{{@key}} icon" style="height:1.5em; width:auto; margin-right:0.4em; display:inline; vertical-align:middle;">
+            
                          {{#if (eq @key 'video game')}}Video Games{{else}}{{capitalize @key}}{{/if}} {{!-- Display name --}}
                      </button>
                 {{/if}}
