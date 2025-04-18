@@ -172,6 +172,7 @@
 
 .cast-member {
     text-align: center;
+    flex-direction: column;
 }
 .cast-member img {
     width: 80px; /* Size for cast images */

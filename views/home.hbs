@@ -6,10 +6,14 @@
 {{!-- Tab Navigation Bar --}}
 <nav class="horizontal-nav container homepage-tabs">
     {{!-- Use data-type attribute for JS targeting --}}
-    <button class="nav-item {{#eq initialTab 'movie'}}active{{/eq}}" data-type="movie">Movies</button>
-    <button class="nav-item {{#eq initialTab 'series'}}active{{/eq}}" data-type="series">Series</button>
-    <button class="nav-item {{#eq initialTab 'book'}}active{{/eq}}" data-type="book">Books</button>
-    <button class="nav-item {{#eq initialTab 'video game'}}active{{/eq}}" data-type="video game">Video Games</button>
+    <button class="nav-item {{#eq initialTab 'movie'}}active{{/eq}}" data-type="movie"> 
+       <img src="/images/movie.svg" alt="Movies icon" style="height:1.5em; width:auto; margin-right:0.4em; display:inline; vertical-align:middle;"> Movies</button>
+    <button class="nav-item {{#eq initialTab 'series'}}active{{/eq}}" data-type="series">
+        <img src="/images/series.svg" alt="Movies icon" style="height:1.5em; width:auto; margin-right:0.4em; display:inline; vertical-align:middle;">Series</button>
+    <button class="nav-item {{#eq initialTab 'book'}}active{{/eq}}" data-type="book">
+        <img src="/images/book.svg" alt="Movies icon" style="height:1.5em; width:auto; margin-right:0.4em; display:inline; vertical-align:middle;">Books</button>
+    <button class="nav-item {{#eq initialTab 'video game'}}active{{/eq}}" data-type="video game">
+        <img src="/images/videogame.svg" alt="Movies icon" style="height:1.5em; width:auto; margin-right:0.4em; display:inline; vertical-align:middle;">Video Games</button>
 </nav>
 
 {{!-- Tab Content Area --}}
@@ -53,7 +57,7 @@
 {{#if user}}
 <section class="media-carousel-section container">
     <h2 class="section-title">📑 In Your Watchlist (Planned)</h2>
-     {{#if watchlist.length}}
+    {{#if watchlist.length}}
     <div class="swiper media-swiper">
         <div class="swiper-wrapper">
             {{#each watchlist}}
