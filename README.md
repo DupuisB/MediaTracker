@@ -24,6 +24,8 @@
   - [8. Potential Future Improvements](#8-potential-future-improvements)
 ## 1. Introduction & Overview
 
+This project was done as part of our IGR (3D & Human Interaction) class.
+
 MediaTracker is a web application designed to help users track and manage their consumption of various media types, including movies, TV series, books, and video games. Users can register, log in, search for media items across different external APIs (TMDB, Google Books, IGDB), add items to their personal library, track their status (planned, watching, completed, etc.), assign ratings, add notes, and organize items into custom lists.
 
 The application is built using a Node.js backend with the Express framework, utilizing SQLite for data persistence. The frontend is rendered using Handlebars, enhanced with client-side JavaScript for dynamic interactions.
